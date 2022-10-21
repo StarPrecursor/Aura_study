@@ -11,16 +11,24 @@ date_min = datetime.datetime(2022, 3, 1)
 date_max = datetime.datetime(2022, 9, 30)
 
 
-def get_symbol_list(date_start=date_min, date_end=date_max, sort=True):
+def get_symbol_list(date_start=date_min, date_end=date_max, sort=True, logic="or"):
     all_symbols = set()
-    for date in pd.date_range(date_start, date_end, freq="D"):
+    for i, date in enumerate(pd.date_range(date_start, date_end, freq="D")):
         date_str = date.strftime("%Y-%m-%d")
         cur_symbols = set()
         for f in (toy_data_dir / date_str).glob("*.csv"):
             if f.stem in badSymbolList:
                 continue
             cur_symbols.add(f.stem)
-        all_symbols |= cur_symbols
+        if logic == "or":
+            all_symbols |= cur_symbols
+        elif logic == "and":
+            if i == 0:
+                all_symbols = cur_symbols
+            else:
+                all_symbols &= cur_symbols
+        else:
+            raise ValueError(f"Unknown logic: {logic}")
     if sort:
         all_symbols = sorted(all_symbols)
     return list(all_symbols)

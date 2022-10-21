@@ -1,0 +1,1 @@
+from artool import analyze
