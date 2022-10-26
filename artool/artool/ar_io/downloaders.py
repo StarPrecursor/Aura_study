@@ -14,7 +14,7 @@ import pandas as pd
 # logging.basicConfig(level=logging.INFO)
 
 
-class Binance_Downloader:
+class BinanceDownloader:
     def __init__(self, trading_type, interval, folder):
         self.trading_type = trading_type
         self.interval = interval
