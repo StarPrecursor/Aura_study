@@ -1,0 +1,1 @@
+from artool.ar_ana import scan

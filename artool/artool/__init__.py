@@ -1,1 +1,1 @@
-from artool import analyze
+from artool import ar_ana
