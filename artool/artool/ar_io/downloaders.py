@@ -21,6 +21,8 @@ class BinanceDownloader:
         self.folder = str(folder)
         self.symbols = self.get_all_symbols()
         self.trading_type_path = f"data/futures/{trading_type}"
+        if trading_type == "spot":
+            self.trading_type_path = f"data/spot"
         self.fail_logs = []
         logging.info(f"Found {len(self.symbols)} symbols")
         logging.info(f"Trading type: {trading_type}")
