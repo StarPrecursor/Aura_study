@@ -11,7 +11,7 @@ from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
 
 import artool
-from artool import analyze, toy
+from artool import ar_ana, toy
 from artool.toy.toy_simu import get_pnl_2side, get_pnl_simple
 
 # remove limits on number of rows and columns
