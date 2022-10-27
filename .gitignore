@@ -3,6 +3,7 @@
 *.feather
 
 **/.archived
+**/.test
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -110,7 +111,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
-env/
+# env/
 venv/
 ENV/
 env.bak/

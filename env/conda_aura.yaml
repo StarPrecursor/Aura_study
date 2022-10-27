@@ -1,0 +1,21 @@
+name: aura
+dependencies:
+  - python=3.9
+  # data
+  - conda-forge::pyarrow
+  - scikit-learn
+  - pandas
+  # tools
+  - pyyaml
+  - ipykernel
+  - tqdm
+  - conda-forge::black
+  # training
+  - lightgbm
+  - conda-forge::tensorflow=2.7.0
+  - conda-forge::optuna
+  # analysis
+  - conda-forge::shap
+  # visualize
+  - conda-forge::matplotlib
+  - anaconda::seaborn
