@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas.tseries.holiday import USFederalHolidayCalendar
 
 
 def get_dt_features(df, name, categories=["hour", "day", "week"], unit="us"):
@@ -8,37 +9,38 @@ def get_dt_features(df, name, categories=["hour", "day", "week"], unit="us"):
         t = pd.to_datetime(t, unit=unit)
     df_out = pd.DataFrame()
     if "year" in categories:
-        df_out[f"{name}__year"] = t.year
-        df_out[f"{name}__is_year_start"] = t.is_year_start
-        df_out[f"{name}__is_year_end"] = t.is_year_end
-        df_out[f"{name}__is_leap_year"] = t.is_leap_year
+        df_out[f"{name}__year"] = t.dt.year
+        df_out[f"{name}__is_year_start"] = t.dt.is_year_start
+        df_out[f"{name}__is_year_end"] = t.dt.is_year_end
+        df_out[f"{name}__is_leap_year"] = t.dt.is_leap_year
     if "quarter" in categories:
-        df_out[f"{name}__quarter"] = t.quarter
-        df_out[f"{name}__is_quarter_start"] = t.is_quarter_start
-        df_out[f"{name}__is_quarter_end"] = t.is_quarter_end
+        df_out[f"{name}__quarter"] = t.dt.quarter
+        df_out[f"{name}__is_quarter_start"] = t.dt.is_quarter_start
+        df_out[f"{name}__is_quarter_end"] = t.dt.is_quarter_end
     if "month" in categories:
-        df_out[f"{name}__month"] = t.month
-        df_out[f"{name}__is_month_start"] = t.is_month_start
-        df_out[f"{name}__is_month_end"] = t.is_month_end
+        df_out[f"{name}__month"] = t.dt.month
+        df_out[f"{name}__is_month_start"] = t.dt.is_month_start
+        df_out[f"{name}__is_month_end"] = t.dt.is_month_end
     if "week" in categories:
-        df_out[f"{name}__week"] = t.week
-        df_out[f"{name}__is_week_start"] = t.is_week_start
-        df_out[f"{name}__is_week_end"] = t.dayofweek >= 5
+        df_out[f"{name}__week"] = t.dt.isocalendar().week.astype(int)
     if "day" in categories:
-        df_out[f"{name}__day"] = t.day
-        df_out[f"{name}__dayofweek"] = t.dayofweek
-        df_out[f"{name}__dayofmonth"] = t.dayofmonth
-        df_out[f"{name}__dayofyear"] = t.dayofyear
-        df_out[f"{name}__days_in_month"] = t.days_in_month
-        df_out[f"{name}__days_in_year"] = t.days_in_year
-        df_out[f"{name}__weekday"] = t.weekday
-        df_out[f"{name}__is_weekend"] = t.dayofweek >= 5
+        df_out[f"{name}__day"] = t.dt.day
+        df_out[f"{name}__dayofweek"] = t.dt.dayofweek
+        df_out[f"{name}__dayofyear"] = t.dt.dayofyear
+        df_out[f"{name}__days_in_month"] = t.dt.days_in_month
+        df_out[f"{name}__weekday"] = t.dt.weekday
+        df_out[f"{name}__is_weekend"] = t.dt.dayofweek >= 5
+        df_out[f"{name}__is_week_start"] = t.dt.dayofweek == 0
+        df_out[f"{name}__is_week_end"] = t.dt.dayofweek >= 5
+        cld = USFederalHolidayCalendar()
+        holidays = cld.holidays(start=t.min(), end=t.max())
+        df_out[f"{name}__is_holiday"] = t.isin(holidays)
     if "hour" in categories:
-        df_out[f"{name}__hour"] = t.hour
+        df_out[f"{name}__hour"] = t.dt.hour
     if "minute" in categories:
-        df_out[f"{name}__minute"] = t.minute
+        df_out[f"{name}__minute"] = t.dt.minute
     if "second" in categories:
-        df_out[f"{name}__second"] = t.second
+        df_out[f"{name}__second"] = t.dt.second
     return df_out
 
 

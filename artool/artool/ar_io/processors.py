@@ -105,3 +105,13 @@ class FundingRateProcessor:
         if bfill:
             df_tmp = df_tmp.bfill()
         return df_tmp[features]
+
+
+def merge_symbols_mp(func, symbols):
+    with ProcessPoolExecutor() as executor:
+        futures = []
+        for symbol in symbols:
+            futures.append(executor.submit(func, symbol))
+        df_list = [f.result() for f in futures]
+    df_out = pd.concat(df_list).reset_index(drop=True)
+    return df_out

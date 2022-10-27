@@ -1,7 +1,9 @@
 import re
 from pathlib import Path
-
 from typing import Union
+
+import git
+
 
 # fetch names with given regex
 def fetch_names(
@@ -18,3 +20,16 @@ def fetch_names(
     if sort:
         names.sort()
     return names
+
+
+def get_git_root(cur) -> Path:
+    cur = Path(cur)
+    git_repo = git.Repo(cur, search_parent_directories=True)
+    git_dir = git_repo.git.rev_parse("--show-toplevel")
+    return Path(git_dir)
+
+
+def get_git_rel_path(cur) -> str:
+    cur = Path(cur)
+    git_dir = get_git_root(cur)
+    return cur.relative_to(git_dir).as_posix()
