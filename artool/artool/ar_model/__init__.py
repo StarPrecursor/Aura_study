@@ -1,1 +1,1 @@
-from artool.ar_model import fr_model, train_utils
+from artool.ar_model import fr_model, train, train_utils

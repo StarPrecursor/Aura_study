@@ -23,6 +23,8 @@ setuptools.setup(
         "PyYAML",
     ],
     entry_points={
-        #"console_scripts": ["",],
+        "console_scripts": [
+            "ar_train = artool.ar_model.train:main",
+        ],
     },
 )

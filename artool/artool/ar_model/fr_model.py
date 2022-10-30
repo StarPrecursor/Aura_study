@@ -1,9 +1,8 @@
 import logging
+from pathlib import Path
 
 import joblib
 import lightgbm as lgb
-import numpy as np
-import pandas as pd
 import yaml
 
 logger = logging.getLogger("artool")
@@ -63,6 +62,8 @@ class FRModel_LGB(FRModel):
         if not self.model_ready:
             logger.error("Model not ready(trained/loaded)")
             return
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
         # save config
         config_path = save_dir / f"{name}.config.yaml"
         with open(config_path, "w") as f:
