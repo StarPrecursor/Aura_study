@@ -25,6 +25,7 @@ setuptools.setup(
     entry_points={
         "console_scripts": [
             "ar_train = artool.ar_model.train:main",
+            "ar_eva = artool.ar_ana.eva:main",
         ],
     },
 )
