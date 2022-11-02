@@ -1,5 +1,9 @@
+import logging
+
 import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
+
+logger= logging.getLogger("artool")
 
 
 def get_dt_features(df, name, categories=["hour", "day", "week"], unit="us"):
@@ -89,12 +93,31 @@ def get_delta_features(df, names, step=1):
     return df_out
 
 
-def get_future_features(df, names, lookforwards, scale=1):
+def get_future_features(df, names, lookforwards, scale=1, min_periods=None):
     df_out = pd.DataFrame()
     for lookforward in lookforwards:
         lf_value = lookforward * scale
         for name in names:
             df_out[f"{name}__future_{lookforward}"] = (
-                df[name].rolling(lf_value).mean().shift(-lf_value)
+                df[name].rolling(lf_value, min_periods=min_periods).mean().shift(-lf_value)
             )
+    return df_out
+
+def get_future_features_trade(df, names, time, lookforwards):
+    """Get future features at trading time"""
+    trade_idx = df[df[time].dt.hour % 8 == 0].index
+    df_tmp = df[names]
+    df_tmp.loc[~trade_idx, :] = 0
+
+    df_out = pd.DataFrame()
+    for lookforward in lookforwards:
+        # lookforward must be a multiple of 8h
+        if lookforward % 8 != 0:
+            logger.error(f"lookforward must be a multiple of 8h, skip {lookforward}")
+            continue
+        n_trade = lookforward // 8
+        for name in names:
+            df_out[f"{name}__future_{lookforward}"] = (
+                df_tmp[name].rolling(n_trade).sum().shift(-n_trade)
+            ) / n_trade
     return df_out
