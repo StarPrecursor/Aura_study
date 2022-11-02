@@ -167,6 +167,9 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         self.plot_vol_hist(ax=ax)
         fig.savefig(save_dir / "vol_hist.png")
         fig, ax = plt.subplots(figsize=(8, 6))
+        self.plot_vol_hour_hist(ax=ax)
+        fig.savefig(save_dir / "vol_hour_hist.png")
+        fig, ax = plt.subplots(figsize=(8, 6))
         self.plot_n_symbol_curve(ax=ax)
         fig.savefig(save_dir / "n_symbol_curve.png")
 
@@ -229,7 +232,6 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         return fig, ax
 
     def plot_vol_hist(self, fig=None, ax=None, label=None):
-        print("#### vol hist")
         if ax is None:
             fig, ax = plt.subplots()
         x1 = self.trade_record["vol_buy"].values
@@ -237,6 +239,26 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         x = np.concatenate([x1, x2])
         sns.histplot(x=x, ax=ax, label=label)
         ax.set_title("vol hist")
+        return fig, ax
+
+    def plot_vol_hour_hist(self, fig=None, ax=None, label=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+        t= self.trade_record["time"].values
+        #hh = [datetime.fromtimestamp(tt).hour for tt in t]
+        hh = pd.to_datetime(t).hour.values % 8
+        x1 = self.trade_record["vol_buy"].values
+        x2 = self.trade_record["vol_sell"].values
+        hour_dict_buy = defaultdict(int)
+        hour_dict_sell = defaultdict(int)
+        for i in range(len(hh)):
+            hour = hh[i]
+            hour_dict_buy[hour] += x1[i]
+            hour_dict_sell[hour] += x2[i]
+        # barplot
+        sns.barplot(x=list(hour_dict_buy.keys()), y=list(hour_dict_buy.values()), ax=ax, label="buy")
+        sns.barplot(x=list(hour_dict_sell.keys()), y=list(hour_dict_sell.values()), ax=ax, label="sell")
+        ax.set_title("vol hour hist")
         return fig, ax
 
     def plot_n_symbol_curve(self, fig=None, ax=None, label=None):
@@ -334,14 +356,35 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
                 if cur["signal"] > self.sell_point or hold == 0:
                     continue
                 # free capital
-                reduced_cap = min(share_caps[symbol], cur["vol"] * self.vol_lim)
-                reduced_hold = reduced_cap / cur["price"]
-                share_holds[symbol] -= reduced_hold
-                share_caps[symbol] -= reduced_cap
-                pnl -= reduced_cap * self.fee
-                cap_free += reduced_cap
-                cur_sell += reduced_cap
-                logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+                #reduced_cap = min(share_caps[symbol], cur["vol"] * self.vol_lim)
+                #reduced_hold = reduced_cap / cur["price"]
+                #share_holds[symbol] -= reduced_hold
+                #share_caps[symbol] -= reduced_cap
+                #pnl -= reduced_cap * self.fee
+                #cap_free += reduced_cap
+                #cur_sell += reduced_cap
+                #logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+
+                # free captital
+                if hold <= cur["vol"] * self.vol_lim / cur["price"]:
+                    reduced_hold = hold
+                    reduced_cap = share_caps[symbol]
+                    share_holds[symbol] = 0
+                    share_caps[symbol] = 0
+                    pnl -= reduced_hold * cur["price"] * self.fee
+                    cap_free += reduced_cap
+                    cur_sell += reduced_cap
+                    logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+                else:
+                    reduced_hold = cur["vol"] * self.vol_lim / cur["price"]
+                    reduced_cap = share_caps[symbol] * reduced_hold / hold
+                    share_holds[symbol] -= reduced_hold
+                    share_caps[symbol] -= reduced_cap
+                    pnl -= reduced_hold * cur["price"] * self.fee
+                    cap_free += reduced_cap
+                    cur_sell += reduced_cap
+                    logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+
             # buy top positive signals
             sig_sybs = []
             for symbol in self.symbols:
