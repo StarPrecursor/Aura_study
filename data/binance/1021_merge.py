@@ -11,7 +11,7 @@ for market in ["spot", "um"]:
         data_dir = Path("/home/yangzhe/data/binance/data/spot/daily/klines/")
 
     # get symbol list
-    symbol_list = ar_io.helpers.fetch_names(data_dir, r"(.*)", sort=True, group_id=1)
+    symbol_list = ar_io.io_utils.fetch_names(data_dir, r"(.*)", sort=True, group_id=1)
     symbol_list = [s[0] for s in symbol_list]
     # print(symbol_list)
 
@@ -25,7 +25,7 @@ for market in ["spot", "um"]:
         symbol_dir = data_dir / symbol / "1m"
         with ProcessPoolExecutor() as executor:
             # get paths end with .csv
-            files = ar_io.helpers.fetch_names(
+            files = ar_io.io_utils.fetch_names(
                 symbol_dir, r"(.*\.csv)", sort=True, group_id=0
             )
             paths = [symbol_dir / p[0] for p in files]

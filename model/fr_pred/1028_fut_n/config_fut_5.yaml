@@ -1,0 +1,123 @@
+model_name: fr_lgb_fut_5
+model_dir: /home/yangzhe/model/fr_pred/1028_lgb_fut_5
+
+input_dir: /home/yangzhe/model/fr_pred/1027_lgb
+train_test_split_date: "2022-06-01"
+
+params:
+  objective: "regression"
+  boosting: "dart"
+  learning_rate: 0.01
+  num_leaves: 20
+  feature_fraction: 0.50
+  bagging_fraction: 0.50
+  bagging_freq: 5
+  min_data_in_leaf: 3
+  lambda_l1: 0.01
+  lambda_l2: 10
+  # other
+  seed: 42
+  # metric
+  metric: ["l2"]
+
+  #early_stopping_rounds: 5
+train_kargs:
+  num_boost_round: 2000
+  #num_boost_round: 300
+
+time: time_H
+target: funding_rate__future_5
+targets:
+  #- funding_rate__future_1
+  #- funding_rate__future_3
+  #- funding_rate__future_5
+  - funding_rate__future_10
+categorical_feature:
+  - time_H__week
+  - time_H__day
+  - time_H__dayofweek
+  - time_H__dayofyear
+  - time_H__days_in_month
+features:
+  - time_H__week
+  - time_H__day
+  - time_H__dayofweek
+  - time_H__dayofyear
+  - time_H__days_in_month
+  - time_H__weekday
+  - time_H__is_weekend
+  - time_H__is_week_start
+  - time_H__is_week_end
+  - time_H__is_holiday
+  - time_H__hour
+  - price__high
+  - price__min
+  - price
+  - price__mean
+  - price__std
+  - price__median
+  - price__skew
+  - vol
+  - vol__mean
+  - vol__std
+  - vol__median
+  - vol__skew
+  - vol_taker_buy__sum
+  - vol_taker_sell__sum
+  - vol_taker_buy_ratio
+  - vol_taker_buy_ratio__mean
+  - vol_taker_buy_ratio__std
+  - vol_taker_buy_ratio__median
+  - vol_taker_buy_ratio__skew
+  - vol_taker_sell_ratio
+  - vol_taker_sell_ratio__mean
+  - vol_taker_sell_ratio__std
+  - vol_taker_sell_ratio__median
+  - vol_taker_sell_ratio__skew
+  - price_ewm_5m
+  - price_ewm_30m
+  - price_ewm_60m
+  - price_ewm_4h
+  - price_ewm_8h
+  - price_ewm_24h
+  - price_ewm_2d
+  - price_ewm_7d
+  - price_ewm_14d
+  - funding_rate__mean
+  - funding_rate__std
+  - funding_rate__max
+  - funding_rate__min
+  - funding_rate__skew
+  - funding_rate
+  - funding_rate__ewm2d__delta1
+  - funding_rate__ewm7d__delta1
+  - funding_rate__ewm14d__delta1
+  - funding_rate__ewm5m
+  - funding_rate__ewm30m
+  - funding_rate__ewm60m
+  - funding_rate__ewm5m__delta1
+  - funding_rate__ewm30m__delta1
+  - funding_rate__ewm60m__delta1
+  - funding_rate__ewm4h
+  - funding_rate__ewm8h
+  - funding_rate__ewm24h
+  - funding_rate__ewm4h__delta1
+  - funding_rate__ewm8h__delta1
+  - funding_rate__ewm24h__delta1
+  - funding_rate__ewm2d
+  - funding_rate__ewm7d
+  - funding_rate__ewm14d
+  - funding_rate__lag1
+  - funding_rate__lag3
+  - funding_rate__lag5
+  - funding_rate__lag8
+  - funding_rate__lag24
+  - funding_rate__lag1__diff
+  - funding_rate__lag3__diff
+  - funding_rate__lag5__diff
+  - funding_rate__lag8__diff
+  - funding_rate__lag24__diff
+  #- symbol
+  #- date
+  - fear_and_greed_value
+  - fear_and_greed_class

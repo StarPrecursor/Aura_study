@@ -10,6 +10,7 @@ dependencies:
   - ipykernel
   - tqdm
   - conda-forge::black
+  - conda-forge::gitpython
   # training
   - lightgbm
   - conda-forge::tensorflow=2.7.0

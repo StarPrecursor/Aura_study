@@ -1,9 +1,8 @@
 import datetime
 import warnings
-from asyncio import futures
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -88,7 +87,19 @@ def generate_symbol(df_fr, symbol):
 
     # Add future funding rate mean
     df_new_cols = ar_io.ar_fe.get_future_features(
-        df_fr_agg, ["funding_rate"], [1, 3, 5, 10], scale=8
+        df_fr_agg, ["funding_rate"], [1, 3, 5, 10, 15, 21, 30, 45], scale=8
+    )
+    df_fr_agg = pd.concat([df_fr_agg, df_new_cols], axis=1)
+    # Add future funding rate mean at trade hour 0/8/16
+    trade_idx = df_fr_agg["time_H"].dt.hour.isin([0, 8, 16])
+    df_fr_agg["funding_rate_trade"] = df_fr_agg["funding_rate"]
+    df_fr_agg.loc[~trade_idx, "funding_rate_trade"] = np.nan
+    df_new_cols = ar_io.ar_fe.get_future_features(
+        df_fr_agg,
+        ["funding_rate_trade"],
+        [1, 3, 5, 10, 15, 21, 30, 45],
+        scale=8,
+        min_periods=1,
     )
     df_fr_agg = pd.concat([df_fr_agg, df_new_cols], axis=1)
 
