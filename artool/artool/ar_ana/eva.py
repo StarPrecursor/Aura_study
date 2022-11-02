@@ -69,7 +69,7 @@ def plot_pred_vs_true(y_true, y_pred, save_dir, label=""):
     plt.close(fig)
 
 
-def plot_symbol_pred_curve(df, t, y_pred, save_dir, label, chunk_size=5):
+def plot_symbol_pred_curve(df, t, y_pred, save_dir, label, chunk_size=5, y_true=None):
     logger.info(f"Plotting symbol pred curve ... ({label})")
     df = df.copy()
     symbols = df["symbol"].unique()
@@ -93,6 +93,20 @@ def plot_symbol_pred_curve(df, t, y_pred, save_dir, label, chunk_size=5):
                 / f"{symbols_sub[0]}_{symbols_sub[-1]}_pred_curve.{label}.png"
             )
             plt.close(fig)
+            # plot true target if specified
+            if y_true is not None:
+                fig, ax = plt.subplots(figsize=(18, 6))
+                for symbol in symbols_sub:
+                    df_sub = df_mm[df_mm["symbol"] == symbol]
+                    ax.plot(df_sub[t], df_sub[y_true], label=symbol)
+                ax.legend()
+                plot_dir_sub = plot_dir / f"week_{wk_n}"
+                plot_dir_sub.mkdir(exist_ok=True, parents=True)
+                fig.savefig(
+                    plot_dir_sub
+                    / f"{symbols_sub[0]}_{symbols_sub[-1]}_true_curve.{label}.png"
+                )
+                plt.close(fig)
 
 
 def shap_summary_plot(ar_model, X, save_dir, label, sampling=None):
@@ -155,7 +169,9 @@ def main():
     plot_pred_vs_true(y_te, y_te_pred, model_dir, label="test")
 
     # Plot symbol pred curve
-    plot_symbol_pred_curve(df_te, cfg["time"], "y_pred", model_dir, label="test")
+    plot_symbol_pred_curve(
+        df_te, cfg["time"], "y_pred", model_dir, label="test", y_true=cfg["target"]
+    )
 
     # SHAP
     logger.info("SHAP importance study...")
