@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Union
 
 import git
+import pandas as pd
 
 
 # fetch names with given regex
@@ -33,3 +34,11 @@ def get_git_rel_path(cur) -> str:
     cur = Path(cur)
     git_dir = get_git_root(cur)
     return cur.relative_to(git_dir).as_posix()
+
+
+def decouple_df(df, on="symbol", within=[], feature_map={}):
+    df_collect = {}
+    for member in within:
+        df_tmp = df[df[on] == member]
+        df_collect[member] = df_tmp[feature_map.keys()].rename(columns=feature_map)
+    return df_collect
