@@ -30,9 +30,14 @@ class TradeSimulatorBase:
 
 class TradeSimulatorSignal(TradeSimulatorBase):
     def __init__(
-        self, trade_data: dict, fee: float = 10e-4, preprocess=True, mp_hash=True
+        self,
+        trade_data: dict,
+        fee: float = 10e-4,
+        preprocess=True,
+        mp_hash=True,
+        trade_features=None,
     ):
-        super().__init__()
+        super().__init__(trade_features=trade_features)
         self.trade_data = trade_data
         self.trade_hash = None
         self.symbols = list(trade_data.keys())
@@ -42,6 +47,9 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         self.fee = fee
         self.trade_record = None
         self.trade_done = False
+        self.signal_true = False
+        if "signal_true" in self.trade_data[self.symbols[0]].columns:
+            self.signal_true = True
 
     def __copy__(self):
         new_self = TradeSimulatorSignal(self.trade_data, preprocess=False)
@@ -148,35 +156,177 @@ class TradeSimulatorSignal(TradeSimulatorBase):
 
     def plot_book_base(self, save_dir):
         save_dir.mkdir(exist_ok=True)
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(16, 9))
+        self.plot_signal_hist(fig, ax)
+        fig.savefig(save_dir / "signal_hist.png")
+        fig, ax = plt.subplots(figsize=(16, 9))
+        self.plot_signal_scatter(fig, ax)
+        fig.savefig(save_dir / "signal_scatter.png")
+        if self.signal_true:
+            fig, ax = plt.subplots(figsize=(16, 9))
+            self.plot_signal_scatter(y="signal_true", fig=fig, ax=ax)
+            fig.savefig(save_dir / "signal_true_scatter.png")
+        # PnL
+        pnl_dir = save_dir / "pnl"
+        pnl_dir.mkdir(exist_ok=True)
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_curve(ax=ax)
-        fig.savefig(save_dir / "pnl_curve.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(pnl_dir / "pnl_curve.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_hist(ax=ax)
-        fig.savefig(save_dir / "pnl_hist.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(pnl_dir / "pnl_hist.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_cum_curve(ax=ax)
-        fig.savefig(save_dir / "pnl_cum_curve.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(pnl_dir / "pnl_cum_curve.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_ma_curve(ax=ax)
-        fig.savefig(save_dir / "pnl_ma_curve.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(pnl_dir / "pnl_ma_curve.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        self.plot_market_trend(ax=ax)
+        fig.savefig(pnl_dir / "market_trend.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        self.plot_market_trend_ratio(ax=ax)
+        fig.savefig(pnl_dir / "market_trend_ratio.png")
+        # Volume
+        vol_dir = save_dir / "vol"
+        vol_dir.mkdir(exist_ok=True)
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_vol_curve(ax=ax)
-        fig.savefig(save_dir / "vol_curve.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(vol_dir / "vol_curve.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_vol_hist(ax=ax)
-        fig.savefig(save_dir / "vol_hist.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(vol_dir / "vol_hist.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_vol_hour_hist(ax=ax)
-        fig.savefig(save_dir / "vol_hour_hist.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(vol_dir / "vol_hour_hist.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        self.plot_cap_curve(ax=ax)
+        fig.savefig(vol_dir / "cap_curve.png")
+        # Symbol
+        fig, ax = plt.subplots(figsize=(12, 6))
+        symbol_dir = save_dir / "symbol"
+        symbol_dir.mkdir(exist_ok=True)
         self.plot_n_symbol_curve(ax=ax)
-        fig.savefig(save_dir / "n_symbol_curve.png")
+        fig.savefig(symbol_dir / "n_symbol_curve.png")
 
     def plot_book(self, save_dir):
         self.plot_book_base(save_dir)
         # close all figures
         plt.close("all")
+
+    def plot_signal_hist(self, fig=None, ax=None, label=None):
+        y_list = []
+        for _, df in self.trade_data.items():
+            y_list.append(df["signal"].values)
+        y = np.concatenate(y_list)
+        if fig is None or ax is None:
+            fig, ax = plt.subplots(figsize=(12, 6))
+        ax.hist(y, bins=50, label=label)
+        ax.set_xlabel("Signal")
+        ax.set_ylabel("Count")
+        return fig, ax
+
+    def plot_signal_scatter(self, fig=None, ax=None, label=None, y="signal"):
+        t_list = []
+        y_list = []
+        for _, df in self.trade_data.items():
+            t_list.append(df["time"].values)
+            y_list.append(df[y].values)
+        t = np.concatenate(t_list)
+        y = np.concatenate(y_list)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(12, 6))
+        ax.scatter(t, y, s=1, alpha=0.2, label="pred")
+        ax.axhline(self.buy_point, color="red", linestyle="--", alpha=0.5, label="buy")
+        ax.axhline(
+            self.sell_point, color="green", linestyle="--", alpha=0.5, label="sell"
+        )
+        patience = abs(self.buy_point - self.sell_point)
+        y_max = max(self.buy_point, self.sell_point) + patience / 2
+        y_min = min(self.buy_point, self.sell_point) - patience
+        ax.set_ylim(y_min, y_max)
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Signal")
+        ax.legend()
+        return fig, ax
+
+    def plot_market_trend(self, fig=None, ax=None, label=None):
+        t_list = []
+        fr_list = []
+        vol_list = []
+        for _, df in self.trade_data.items():
+            t_list.append(df["time"].values)
+            fr_list.append(df["funding_rate"].values)
+            vol_list.append(df["vol"].values)
+        t = np.concatenate(t_list)
+        fr = np.concatenate(fr_list)
+        vol = np.concatenate(vol_list)
+        fr_vol = fr * vol
+        t_unique, t_idx = np.unique(t, return_inverse=True)
+        fr_vol_sum = np.zeros_like(t_unique, dtype=np.float64)
+        fr_vol_pos = np.zeros_like(t_unique, dtype=np.float64)
+        fr_vol_neg = np.zeros_like(t_unique, dtype=np.float64)
+        for i in range(len(t_unique)):
+            fr_vol_sum[i] = np.sum(fr_vol[t_idx == i])
+            fr_vol_pos[i] = np.sum(fr_vol[t_idx == i][fr_vol[t_idx == i] > 0])
+            fr_vol_neg[i] = np.sum(fr_vol[t_idx == i][fr_vol[t_idx == i] < 0])
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(12, 6))
+
+        scale = np.mean(np.abs(fr_vol_sum))
+        fr_vol_sum /= scale
+        fr_vol_pos /= scale
+        fr_vol_neg /= scale
+
+        ax.plot(t_unique, fr_vol_sum, label="all", alpha=0.5, color="grey")
+        ax.plot(t_unique, fr_vol_pos, label="pos", alpha=0.5, color="red")
+        ax.plot(t_unique, fr_vol_neg, label="neg", alpha=0.5, color="green")
+        # plot moving average
+        # ma_24 = np.convolve(fr_vol_sum, np.ones(24) / 24, mode="same")
+        # ma_72 = np.convolve(fr_vol_sum, np.ones(72) / 72, mode="same")
+        # ax2 = ax.twinx()
+        # ax2.plot(t_unique, ma_24, label="ma_24h")
+        # ax2.plot(t_unique, ma_72, label="ma_72h")
+        ax.axhline(0, color="red", linestyle="--", alpha=0.5, label="0")
+        ax.set_yscale("symlog", linthresh=0.1, linscale=0.2)
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Funding Rate * Volume trend")
+        ax.legend()
+        return fig, ax
+
+    def plot_market_trend_ratio(self, fig=None, ax=None, label=None):
+        t_list = []
+        fr_list = []
+        vol_list = []
+        for _, df in self.trade_data.items():
+            t_list.append(df["time"].values)
+            fr_list.append(df["funding_rate"].values)
+            vol_list.append(df["vol"].values)
+        t = np.concatenate(t_list)
+        fr = np.concatenate(fr_list)
+        vol = np.concatenate(vol_list)
+        fr_vol = fr * vol
+        t_unique, t_idx = np.unique(t, return_inverse=True)
+        fr_vol_pos = np.zeros_like(t_unique, dtype=np.float64)
+        fr_vol_neg = np.zeros_like(t_unique, dtype=np.float64)
+        for i in range(len(t_unique)):
+            fr_vol_pos[i] = np.sum(fr_vol[t_idx == i][fr_vol[t_idx == i] > 0])
+            fr_vol_neg[i] = np.sum(fr_vol[t_idx == i][fr_vol[t_idx == i] < 0])
+        fr_vol_pos_ratio = fr_vol_pos / (fr_vol_pos - fr_vol_neg)
+        fr_vol_neg_ratio = fr_vol_neg / (fr_vol_pos - fr_vol_neg)
+        # get above 0.5 part
+        fr_vol_pos_major = np.clip(fr_vol_pos_ratio, 0.5, 1)
+        fr_vol_neg_major = np.clip(fr_vol_pos_ratio, 0, 0.5)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(t_unique, fr_vol_pos_major, label="pos", alpha=0.5, color="red")
+        ax.plot(t_unique, fr_vol_neg_major, label="neg", alpha=0.5, color="green")
+        ax.axhline(0.5, color="grey", linestyle="--", alpha=0.5, label="0.5")
+        ax.set_ylim(0, 1)
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Funding Rate * Volume trend ratio")
+        ax.legend()
+        return fig, ax
 
     def plot_pnl_curve(self, fig=None, ax=None, label=None):
         if ax is None:
@@ -244,8 +394,8 @@ class TradeSimulatorSignal(TradeSimulatorBase):
     def plot_vol_hour_hist(self, fig=None, ax=None, label=None):
         if ax is None:
             fig, ax = plt.subplots()
-        t= self.trade_record["time"].values
-        #hh = [datetime.fromtimestamp(tt).hour for tt in t]
+        t = self.trade_record["time"].values
+        # hh = [datetime.fromtimestamp(tt).hour for tt in t]
         hh = pd.to_datetime(t).hour.values % 8
         x1 = self.trade_record["vol_buy"].values
         x2 = self.trade_record["vol_sell"].values
@@ -256,9 +406,31 @@ class TradeSimulatorSignal(TradeSimulatorBase):
             hour_dict_buy[hour] += x1[i]
             hour_dict_sell[hour] += x2[i]
         # barplot
-        sns.barplot(x=list(hour_dict_buy.keys()), y=list(hour_dict_buy.values()), ax=ax, label="buy")
-        sns.barplot(x=list(hour_dict_sell.keys()), y=list(hour_dict_sell.values()), ax=ax, label="sell")
+        sns.barplot(
+            x=list(hour_dict_buy.keys()),
+            y=list(hour_dict_buy.values()),
+            ax=ax,
+            label="buy",
+        )
+        sns.barplot(
+            x=list(hour_dict_sell.keys()),
+            y=list(hour_dict_sell.values()),
+            ax=ax,
+            label="sell",
+        )
         ax.set_title("vol hour hist")
+        return fig, ax
+
+    def plot_cap_curve(self, fig=None, ax=None, label=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+        sns.lineplot(
+            data=self.trade_record, x="time", y="cap_free", ax=ax, label="cap_free"
+        )
+        # sns.lineplot(data=self.trade_record, x="time", y="cap_used", ax=ax, label="cap_used")
+        ax.axhline(y=self.cap, color="r", linestyle="--", label="cap_total")
+        ax.set_title("capital usage history")
+        ax.legend()
         return fig, ax
 
     def plot_n_symbol_curve(self, fig=None, ax=None, label=None):
@@ -296,8 +468,15 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
         sell_point=0,
         buy_point=0,
         vol_limit=0.02,
+        trade_features=None,
     ):
-        super().__init__(trade_data, fee=fee, preprocess=preprocess, mp_hash=mp_hash)
+        super().__init__(
+            trade_data,
+            fee=fee,
+            preprocess=preprocess,
+            mp_hash=mp_hash,
+            trade_features=trade_features,
+        )
         self.cap = None
         self.sell_point = sell_point
         self.buy_point = buy_point
@@ -356,45 +535,31 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
                 if cur["signal"] > self.sell_point or hold == 0:
                     continue
                 # free capital
-                #reduced_cap = min(share_caps[symbol], cur["vol"] * self.vol_lim)
-                #reduced_hold = reduced_cap / cur["price"]
-                #share_holds[symbol] -= reduced_hold
-                #share_caps[symbol] -= reduced_cap
-                #pnl -= reduced_cap * self.fee
-                #cap_free += reduced_cap
-                #cur_sell += reduced_cap
-                #logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
-
-                # free captital
                 if hold <= cur["vol"] * self.vol_lim / cur["price"]:
                     reduced_hold = hold
                     reduced_cap = share_caps[symbol]
                     share_holds[symbol] = 0
                     share_caps[symbol] = 0
-                    pnl -= reduced_hold * cur["price"] * self.fee
-                    cap_free += reduced_cap
-                    cur_sell += reduced_cap
-                    logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
                 else:
                     reduced_hold = cur["vol"] * self.vol_lim / cur["price"]
                     reduced_cap = share_caps[symbol] * reduced_hold / hold
                     share_holds[symbol] -= reduced_hold
                     share_caps[symbol] -= reduced_cap
-                    pnl -= reduced_hold * cur["price"] * self.fee
-                    cap_free += reduced_cap
-                    cur_sell += reduced_cap
-                    logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+                pnl -= reduced_hold * cur["price"] * self.fee
+                cap_free += reduced_cap
+                cur_sell += reduced_cap
+                logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
 
             # buy top positive signals
             sig_sybs = []
             for symbol in self.symbols:
                 cur = self.get_data(symbol, tick)
-                if cur["signal"] <= self.buy_point:
-                    continue
                 sig_sybs.append((cur["signal"], symbol))
             sig_sybs = sorted(sig_sybs, reverse=True)
-            for _, symbol in sig_sybs:
+            for cur_sig, symbol in sig_sybs:
                 if cap_free <= 0.01:
+                    break
+                if cur_sig <= self.buy_point:
                     break
                 cur = self.get_data(symbol, tick)
                 cap_free_tmp = cap_free
@@ -436,18 +601,22 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
 
     def plot_book_simple(self, save_dir, top_n=10, plot_shift=200):
         save_dir.mkdir(exist_ok=True)
-        fig, ax = plt.subplots(figsize=(8, 6))
+        # PnL
+        pnl_dir = save_dir / "pnl"
+        pnl_dir.mkdir(exist_ok=True)
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_cum_curve_rate(ax=ax)
-        fig.savefig(save_dir / "pnl_cum_curve_rate.png")
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.savefig(pnl_dir / "pnl_cum_curve_rate.png")
+        fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_ma_curve_rate(ax=ax)
-        fig.savefig(save_dir / "pnl_ma_curve_rate.png")
+        fig.savefig(pnl_dir / "pnl_ma_curve_rate.png")
         fig, ax = plt.subplots(figsize=(18, 6))
         # symbol capital history
+        symbol_dir = save_dir / "symbol"
+        symbol_dir.mkdir(exist_ok=True)
+        fig, ax = plt.subplots(figsize=(18, 6))
         self.plot_symbol_cap(ax=ax, top_n=top_n, plot_shift=plot_shift)
-        plot_dir = save_dir / "symbols"
-        plot_dir.mkdir(exist_ok=True)
-        fig.savefig(plot_dir / f"cap_top{top_n}_history.png")
+        fig.savefig(symbol_dir / f"cap_top{top_n}_history.png")
 
     def plot_book(self, save_dir):
         self.plot_book_base(save_dir)
@@ -466,8 +635,10 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
         # plot history
         for i, (symbol, _) in enumerate(top_symbols[:top_n]):
             data = sd[symbol]
-            cur_shift = plot_shift * i 
-            ax.plot([d[0] for d in data], [d[1] + cur_shift for d in data], label=symbol)
+            cur_shift = plot_shift * i
+            ax.plot(
+                [d[0] for d in data], [d[1] + cur_shift for d in data], label=symbol
+            )
         ax.legend()
 
     def plot_pnl_cum_curve_rate(self, fig=None, ax=None, label=None):
