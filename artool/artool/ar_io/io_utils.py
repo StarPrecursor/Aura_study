@@ -37,8 +37,14 @@ def get_git_rel_path(cur) -> str:
 
 
 def decouple_df(df, on="symbol", within=[], feature_map={}):
+    """Decouple a dataframe into multiple dataframes.
+
+    - feature_map: dict, {feature_name_out: feature_name_in}
+
+    """
     df_collect = {}
+    rename_dict = {v: k for k, v in feature_map.items()}
     for member in within:
         df_tmp = df[df[on] == member]
-        df_collect[member] = df_tmp[feature_map.keys()].rename(columns=feature_map)
+        df_collect[member] = df_tmp[rename_dict.keys()].rename(columns=rename_dict)
     return df_collect
