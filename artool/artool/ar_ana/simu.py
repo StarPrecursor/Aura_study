@@ -5,6 +5,8 @@ from concurrent.futures import ProcessPoolExecutor
 import matplotlib
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 from tqdm import tqdm
 
 matplotlib.use("Agg")
@@ -26,6 +28,10 @@ class TradeSimulatorBase:
             ]
         else:
             self.trade_features = trade_features
+
+    def update_para(self, para_dict: dict):
+        for k, v in para_dict.items():
+            setattr(self, k, v)
 
 
 class TradeSimulatorSignal(TradeSimulatorBase):
@@ -181,6 +187,11 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_ma_curve(ax=ax)
         fig.savefig(pnl_dir / "pnl_ma_curve.png")
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        self.plot_pnl_fee_relation(ax=ax)
+        fig.savefig(pnl_dir / "pnl_fee_relation.png")
+
         fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_market_trend(ax=ax)
         fig.savefig(pnl_dir / "market_trend.png")
@@ -361,6 +372,37 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         ax.set_title("PnL ma curve")
         return fig, ax
 
+    def plot_pnl_fee_relation(self, fig=None, ax=None, label=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+        x = []
+        y = []
+        for symbol, cur_fee in self.symbol_fee.items():
+            cur_pnl = self.symbol_pnl[symbol]
+            y.append((cur_pnl - cur_fee) / cur_fee)
+            pred = self.trade_data[symbol]["signal"].values
+            x.append(np.std(pred))
+        sns.scatterplot(x=x, y=y, ax=ax, label=label)
+        # linear fit x, y
+        x_min, x_max = np.min(x), np.max(x)
+        x = np.array(x).reshape(-1, 1)
+        y = np.array(y).reshape(-1, 1)
+        model = LinearRegression()
+        model.fit(x, y)
+        x_range = x_max - x_min
+        xx = np.linspace(x_min - x_range * 0.1, x_max + x_range * 0.1, 100).reshape(
+            -1, 1
+        )
+        yy = model.predict(xx)
+        ax.plot(xx, yy, color="red", linestyle="--", alpha=0.5)
+        y_pred = model.predict(x)
+        ax.set_xlabel("Signal std")
+        ax.set_ylabel("PnL / Fee")
+        r2 = r2_score(y, y_pred)
+        corr = np.corrcoef(x.reshape(-1), y.reshape(-1))[0, 1]
+        ax.set_title(f"R2: {r2:.3f}, Corr: {corr:.3f}")
+        return fig, ax
+
     def plot_vol_curve(self, fig=None, ax=None, label=None):
         if ax is None:
             fig, ax = plt.subplots()
@@ -499,10 +541,15 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
     def set_buy_point(self, buy_point):
         self.buy_point = buy_point
 
-    def trade(self, cap, show_progress=True):
+    def trade(self, cap=None, show_progress=True):
         logger.debug("Simulating trading")
-        self.cap = cap
-        cap_free = cap
+        if cap is None:
+            if self.cap is None:
+                logger.error("Can't simulate trade because cap is not set")
+                return
+        else:
+            self.cap = cap
+        cap_free = self.cap
         trade_record = {
             "time": [],
             "cap_free": [],
@@ -513,6 +560,8 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
             "vol_sell": [],
         }
         symbol_data = defaultdict(list)
+        symbol_pnl = defaultdict(float)
+        symbol_fee = defaultdict(float)
         share_holds = defaultdict(float)
         share_caps = defaultdict(float)
         cum_pnl = 0
@@ -528,7 +577,9 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
             if pd.to_datetime(tick).hour in [0, 8, 16]:
                 for symbol, hold in share_holds.items():
                     cur = self.get_data(symbol, tick)
-                    pnl += hold * cur["price"] * cur["funding_rate"]
+                    cur_pnl = hold * cur["price"] * cur["funding_rate"]
+                    pnl += cur_pnl
+                    symbol_pnl[symbol] += cur_pnl
             # sell shares with negative signal
             for symbol, hold in share_holds.items():
                 cur = self.get_data(symbol, tick)
@@ -545,7 +596,9 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
                     reduced_cap = share_caps[symbol] * reduced_hold / hold
                     share_holds[symbol] -= reduced_hold
                     share_caps[symbol] -= reduced_cap
-                pnl -= reduced_hold * cur["price"] * self.fee
+                cur_fee = reduced_hold * cur["price"] * self.fee
+                pnl -= cur_fee
+                symbol_fee[symbol] += cur_fee
                 cap_free += reduced_cap
                 cur_sell += reduced_cap
                 logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
@@ -574,7 +627,9 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
                 new_hold = cur_cap / cur["price"]
                 share_holds[symbol] += new_hold
                 share_caps[symbol] += cur_cap
-                pnl -= cur_cap * self.fee
+                cur_fee = cur_cap * self.fee
+                pnl -= cur_fee
+                symbol_fee[symbol] += cur_fee
                 cap_free -= cur_cap
                 cur_buy += cur_cap
                 logger.debug(f"buy {new_hold} {symbol} at {cur['price']}")
@@ -589,7 +644,15 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
             for symbol, hold in share_holds.items():
                 if hold > 0:
                     n_symbol += 1
-                    symbol_data[symbol].append((tick, share_caps[symbol], hold))
+                    symbol_data[symbol].append(
+                        (
+                            tick,
+                            share_caps[symbol],
+                            hold,
+                            symbol_pnl[symbol],
+                            symbol_fee[symbol],
+                        )
+                    )
             trade_record["n_symbol"].append(n_symbol)
             cum_pnl += pnl
             if show_progress:
@@ -597,6 +660,8 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
                 tq_ticks.set_description(f"cum_pnl_rate: {cum_pnl_rate:.2f}%")
         self.trade_record = pd.DataFrame(trade_record)
         self.symbol_data = symbol_data
+        self.symbol_pnl = symbol_pnl
+        self.symbol_fee = symbol_fee
         self.trade_done = True
 
     def plot_book_simple(self, save_dir, top_n=10, plot_shift=200):
