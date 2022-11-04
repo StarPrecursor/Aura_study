@@ -221,6 +221,9 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         fig.savefig(symbol_dir / "n_symbol_curve.png")
 
     def plot_book(self, save_dir):
+        if not self.trade_done:
+            logger.error("Trade not done yet, will not make plot book")
+            return
         self.plot_book_base(save_dir)
         # close all figures
         plt.close("all")
@@ -636,7 +639,7 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
             # record
             trade_record["time"].append(tick)
             trade_record["cap_free"].append(cap_free)
-            trade_record["cap_used"].append(cap - cap_free)
+            trade_record["cap_used"].append(self.cap - cap_free)
             trade_record["pnl"].append(pnl)
             trade_record["vol_buy"].append(cur_buy)
             trade_record["vol_sell"].append(-cur_sell)
@@ -684,6 +687,9 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
         fig.savefig(symbol_dir / f"cap_top{top_n}_history.png")
 
     def plot_book(self, save_dir):
+        if not self.trade_done:
+            logger.error("Trade not done yet, will not make plot book")
+            return
         self.plot_book_base(save_dir)
         self.plot_book_simple(save_dir)
         # close all figures
