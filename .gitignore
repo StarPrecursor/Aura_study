@@ -1,6 +1,7 @@
 *.png
 *.log
 *.feather
+*.csv
 
 **/.archived
 **/.test
