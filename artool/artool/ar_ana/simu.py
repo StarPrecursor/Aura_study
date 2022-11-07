@@ -421,8 +421,6 @@ class TradeSimulatorSignal(TradeSimulatorBase):
                 cur_cap_integral += d[1]
             cur_cap_mean = cur_cap_integral / n_ticks
 
-
-
     def plot_vol_curve(self, fig=None, ax=None, label=None):
         if ax is None:
             fig, ax = plt.subplots()
@@ -748,6 +746,22 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
         sns.lineplot(data=df, x="time", y="pnl_ma_rate", ax=ax, label=label)
         ax.set_title("PnL ma curve rate")
         return fig, ax
+
+
+class TradeSimulatorSignalGeneral(TradeSimulatorSignalSimple):
+    def trade(self, strategy, show_progress=True):
+        if self.cap is None:
+            logger.error("Can't simulate trade because cap is not set")
+            return
+        # self.strategy = strategy
+        # res = self.strategy(self, show_progress=show_progress)
+        # self.trade_record = pd.DataFrame(res["trade_record"])
+        # self.symbol_data = res["symbol_data"]
+        # self.symbol_pnl = res["symbol_pnl"]
+        # self.symbol_fee = res["symbol_fee"]
+        self.strategy = strategy(self, show_progress=show_progress)
+        self.strategy.run()
+        self.trade_done = True
 
 
 # Naive attempt, not working well, to be removed
