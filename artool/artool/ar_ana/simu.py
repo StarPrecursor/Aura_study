@@ -749,17 +749,34 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
 
 
 class TradeSimulatorSignalGeneral(TradeSimulatorSignalSimple):
-    def trade(self, strategy, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.signal = None
+        self.strategy = None
+        self.strategy_ready = False
+
+    def __copy__(self):
+        new_self = TradeSimulatorSignalGeneral(self.trade_data, preprocess=False)
+        new_self.__dict__.update(self.__dict__)
+        new_self.trade_record = None
+        new_self.trade_done = False
+        if self.strategy_ready:
+            new_self.set_strategy(self.strategy_class, **(self.strategy_kwargs))
+        return new_self
+
+    def set_strategy(self, strategy, **kwargs):
+        self.strategy_class = strategy
+        self.strategy_kwargs = kwargs
+        self.strategy = strategy(self, **kwargs)
+        self.strategy_ready = True
+
+    def trade(self):
         if self.cap is None:
             logger.error("Can't simulate trade because cap is not set")
             return
-        # self.strategy = strategy
-        # res = self.strategy(self, show_progress=show_progress)
-        # self.trade_record = pd.DataFrame(res["trade_record"])
-        # self.symbol_data = res["symbol_data"]
-        # self.symbol_pnl = res["symbol_pnl"]
-        # self.symbol_fee = res["symbol_fee"]
-        self.strategy = strategy(self, **kwargs)
+        if not self.strategy_ready:
+            logger.error("Can't simulate trade because strategy is not set")
+            return
         self.strategy.run()
         self.trade_done = True
 
