@@ -749,7 +749,7 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
 
 
 class TradeSimulatorSignalGeneral(TradeSimulatorSignalSimple):
-    def trade(self, strategy, show_progress=True):
+    def trade(self, strategy, **kwargs):
         if self.cap is None:
             logger.error("Can't simulate trade because cap is not set")
             return
@@ -759,7 +759,7 @@ class TradeSimulatorSignalGeneral(TradeSimulatorSignalSimple):
         # self.symbol_data = res["symbol_data"]
         # self.symbol_pnl = res["symbol_pnl"]
         # self.symbol_fee = res["symbol_fee"]
-        self.strategy = strategy(self, show_progress=show_progress)
+        self.strategy = strategy(self, **kwargs)
         self.strategy.run()
         self.trade_done = True
 

@@ -1,6 +1,10 @@
+from functools import partial
 import logging
 from collections import defaultdict
 from copy import deepcopy
+from typing import Callable, Union
+
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
@@ -179,10 +183,94 @@ class ChampagneTower(StrategyBase):
             self.pass_data()
 
 
-class WeightedTarget(ChampagneTower):
+class ChampagneTowerHourlyWeighted(ChampagneTower):
+    def __init__(self, simu, show_progress=True):
+        super().__init__(simu, show_progress=show_progress)
+    
+    def get_hour_weight(self, tick):
+        hour = pd.to_datetime(tick).hour % 8
+        return np.power(2, -(7 - float(hour))).astype(float)  # Integers to negative integer powers are not allowed
+
+    def sell(self, tick):
+        """Sells shares with negative signal."""
+        simu = self.simu
+        h_wt = self.get_hour_weight(tick)
+        for symbol, hold in self.share_holds.items():
+            cur = simu.get_data(symbol, tick)
+            if cur["signal"] > simu.sell_point or hold == 0:
+                continue
+                # free capital
+            if hold <= cur["vol"] * simu.vol_lim / cur["price"]:
+                reduced_hold = hold
+                reduced_cap = self.share_caps[symbol]
+            else:
+                reduced_hold = cur["vol"] * simu.vol_lim / cur["price"]
+                reduced_cap = self.share_caps[symbol] * reduced_hold / hold
+            # perform less changes for hours that far from trading hour
+            reduced_hold *= h_wt
+            reduced_cap *= h_wt
+            # updates
+            self.share_holds[symbol] -= reduced_hold 
+            self.share_caps[symbol] -= reduced_cap
+            cur_fee = reduced_hold * cur["price"] * simu.fee
+            self.cur_pnl -= cur_fee
+            self.symbol_fee[symbol] += cur_fee
+            self.cap_free += reduced_cap
+            self.cur_sell += reduced_cap
+            logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+
+    def buy(self, tick, tick_id):
+        simu = self.simu
+        # buy top positive signals
+        sig_sybs = self.get_ranked_signal(tick, simu)
+        h_wt = self.get_hour_weight(tick)
+        for cur_sig, symbol in sig_sybs:
+            if self.cap_free <= 0.01:
+                break
+            if cur_sig <= simu.buy_point:
+                break
+            # determine assigned share
+            cur = simu.get_data(symbol, tick)
+            cap_free_tmp = self.cap_free * h_wt  # apply hour weight
+            if tick_id < simu.warmup_ticks:
+                cap_free_tmp = min(self.cap_free, simu.cap * simu.warmup_cap_ratio)
+            cur_cap = min(
+                cap_free_tmp,
+                cur["vol"] * simu.vol_lim,
+                simu.cap * simu.hold_lim - self.share_caps[symbol],
+            )
+            self.add_hold(symbol, cur_cap, cur["price"])
+
+
+class DynamicShare(StrategyBase):
     def __init__(self, simu, show_progress=True):
         super().__init__(simu, show_progress)
+    
+
+
+def relu(x):
+    return np.maximum(x, 0)
+
+def linear(x, a=1, b=0):
+    return a * x + b
+
+
+class WeightedTarget(ChampagneTower):
+    def __init__(self, simu, show_progress=True, activation="relu", atv_params={}):
+        super().__init__(simu, show_progress)
         self.symbol_wt = defaultdict(float)
+        self.set_activation(activation, atv_params)
+
+    def set_activation(self, activation: Union[Callable, str],  atv_params):
+        if isinstance(activation, str):
+            if activation == "relu":
+                self.atv = relu
+            if activation == "linear":
+                self.atv = partial(linear, **atv_params)
+            else:
+                raise ValueError(f"activation {activation} not supported")
+        else:
+            self.atv = activation
 
     def buy(self, tick, tick_id=None):  # tick_id is kept for compatibility
         simu = self.simu
@@ -190,7 +278,7 @@ class WeightedTarget(ChampagneTower):
         total_wt = 0
         for symbol in simu.symbols:
             cur = simu.get_data(symbol, tick)
-            cur_wt = max(cur["signal"] - simu.buy_point, 0)
+            cur_wt = relu(self.atv(cur["signal"] - simu.buy_point))  # type: ignore
             self.symbol_wt[symbol] = cur_wt
             total_wt += cur_wt
         if total_wt == 0:
