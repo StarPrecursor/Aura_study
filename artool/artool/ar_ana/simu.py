@@ -187,11 +187,9 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_ma_curve(ax=ax)
         fig.savefig(pnl_dir / "pnl_ma_curve.png")
-
         fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_pnl_fee_relation(ax=ax)
         fig.savefig(pnl_dir / "pnl_fee_relation.png")
-
         fig, ax = plt.subplots(figsize=(12, 6))
         self.plot_market_trend(ax=ax)
         fig.savefig(pnl_dir / "market_trend.png")
@@ -376,35 +374,54 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         return fig, ax
 
     def plot_pnl_fee_relation(self, fig=None, ax=None, label=None):
-        if ax is None:
-            fig, ax = plt.subplots()
-        x = []
+        """Plot PnL/fee vs signal std"""
+        # get data
+        x_std = []
         y = []
         for symbol, cur_fee in self.symbol_fee.items():
-            cur_pnl = self.symbol_pnl[symbol]
+            cur_pnl = self.symbol_pnl[symbol]  # Fee not included
             y.append((cur_pnl - cur_fee) / cur_fee)
             pred = self.trade_data[symbol]["signal"].values
-            x.append(np.std(pred))
-        sns.scatterplot(x=x, y=y, ax=ax, label=label)
+            x_std.append(np.std(pred))
+        sns.scatterplot(x=x_std, y=y, ax=ax, label=label)
         # linear fit x, y
-        x_min, x_max = np.min(x), np.max(x)
-        x = np.array(x).reshape(-1, 1)
+        x_min, x_max = np.min(x_std), np.max(x_std)
+        x_std = np.array(x_std).reshape(-1, 1)
         y = np.array(y).reshape(-1, 1)
         model = LinearRegression()
-        model.fit(x, y)
+        model.fit(x_std, y)
         x_range = x_max - x_min
         xx = np.linspace(x_min - x_range * 0.1, x_max + x_range * 0.1, 100).reshape(
             -1, 1
         )
         yy = model.predict(xx)
+        y_pred = model.predict(x_std)
+        r2 = r2_score(y, y_pred)
+        corr = np.corrcoef(x_std.reshape(-1), y.reshape(-1))[0, 1]
+        # plot
+        if ax is None:
+            fig, ax = plt.subplots()
         ax.plot(xx, yy, color="red", linestyle="--", alpha=0.5)
-        y_pred = model.predict(x)
         ax.set_xlabel("Signal std")
         ax.set_ylabel("PnL / Fee")
-        r2 = r2_score(y, y_pred)
-        corr = np.corrcoef(x.reshape(-1), y.reshape(-1))[0, 1]
         ax.set_title(f"R2: {r2:.3f}, Corr: {corr:.3f}")
         return fig, ax
+
+    def plot_pnl_rate_vs_std(self, fig=None, ax=None, label=None):
+        """Plot PnL/mean_cap vs signal std"""
+        # get data
+        x_std = []
+        y = []
+        n_ticks = self.trade_record.shape[0]
+        for symbol, cur_fee in self.symbol_fee.items():
+            cur_pnl = self.symbol_pnl[symbol]  # Fee not included
+            cur_pnl -= cur_fee
+            cur_cap_integral = 0
+            for d in self.symbol_data[symbol]:
+                cur_cap_integral += d[1]
+            cur_cap_mean = cur_cap_integral / n_ticks
+
+
 
     def plot_vol_curve(self, fig=None, ax=None, label=None):
         if ax is None:
@@ -655,7 +672,7 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
                             symbol_pnl[symbol],
                             symbol_fee[symbol],
                         )
-                    )
+                    )  # if need to add extra data, must not change the existing order
             trade_record["n_symbol"].append(n_symbol)
             cum_pnl += pnl
             if show_progress:
@@ -733,44 +750,7 @@ class TradeSimulatorSignalSimple(TradeSimulatorSignal):
         return fig, ax
 
 
-class TradeSimulatorSignalRank(TradeSimulatorSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.trade_record = None
-        self.trade_done = False
-
-    def trade(self, cap, show_progress=True):
-        logger.debug("Simulating trading")
-        self.cap = cap
-        cap_free = cap
-        trade_record = {
-            "time": [],
-            "cap_free": [],
-            "cap_used": [],
-            "n_symbol": [],
-            "pnl": [],
-            "vol_buy": [],
-            "vol_sell": [],
-        }
-        share_holds = defaultdict(float)
-        share_caps = defaultdict(float)
-        cum_pnl = 0
-        if show_progress:
-            tq_ticks = tqdm(self.ticks)
-        else:
-            tq_ticks = self.ticks
-        for tick in tq_ticks:
-            pnl = 0
-            cur_buy = 0
-            cur_sell = 0
-            # check if crypto trading hour (00:00, 08:00, 16:00)
-            if pd.to_datetime(tick).hour in [0, 8, 16]:
-                for symbol, hold in share_holds.items():
-                    cur = self.get_data(symbol, tick)
-                    pnl += hold * cur["price"] * cur["funding_rate"]
-
-
-# Not working well
+# Naive attempt, not working well, to be removed
 class TradeSimulatorSignalPeriodic(TradeSimulatorSignalSimple):
     def __init__(self, *args, period=8, **kwargs):
         super().__init__(*args, **kwargs)
