@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 
-logger= logging.getLogger("artool")
+logger = logging.getLogger("artool")
 
 
 def get_dt_features(df, name, categories=["hour", "day", "week"], unit="us"):
@@ -73,6 +73,11 @@ def get_rolling_features(df, names, lookbacks):
             df_out[f"{name}__rol_max"] = df[name].rolling(lookback).max()
             df_out[f"{name}__rol_skew"] = df[name].rolling(lookback).skew()
             df_out[f"{name}__rol_kurt"] = df[name].rolling(lookback).kurt()
+            # combinations
+            df_out[f"{name}__rol_mean_std_ratio"] = (
+                df_out[f"{name}__rol_mean"] / df_out[f"{name}__rol_std"]
+            )
+
     return df_out
 
 
@@ -99,9 +104,47 @@ def get_future_features(df, names, lookforwards, scale=1, min_periods=None):
         lf_value = lookforward * scale
         for name in names:
             df_out[f"{name}__future_{lookforward}"] = (
-                df[name].rolling(lf_value, min_periods=min_periods).mean().shift(-lf_value)
+                df[name]
+                .rolling(lf_value, min_periods=min_periods)
+                .mean()
+                .shift(-lf_value)
             )
     return df_out
+
+
+def eff_target(sr, df, fr_col="funding_rate", price_col="price"):
+    idx = sr.index
+    if idx[0] == 0:
+        return 0
+    # effective factor
+    price = df.loc[idx, price_col]
+    price_0 = df.loc[idx[0] - 1, price_col]
+    eff_factor = price / price_0
+    # effective funding rate
+    fr = df.loc[idx, fr_col]
+    fr_eff = fr * eff_factor
+    return fr_eff.dropna().mean()
+
+
+def get_future_fr_eff(
+    df,
+    fr_col="funding_rate",
+    price_col="price",
+    lookforwards=[1, 3, 5],
+    scale=1,
+    min_periods=None,
+):
+    df_out = pd.DataFrame()
+    for lookforward in lookforwards:
+        lf_value = lookforward * scale
+        df_out[f"{fr_col}__future_{lookforward}_eff"] = (
+            df["funding_rate"]
+            .rolling(lf_value, min_periods=min_periods)
+            .apply(eff_target, raw=False, args=(df, fr_col, price_col))
+            .shift(-lf_value)
+        )
+    return df_out
+
 
 def get_future_features_trade(df, names, time, lookforwards):
     """Get future features at trading time"""
