@@ -123,7 +123,7 @@ class ChampagneTower(StrategyBase):
             cur = simu.get_data(symbol, tick)
             if cur["signal"] > simu.sell_point or hold == 0:
                 continue
-                # free capital
+            # free capital
             if hold <= cur["vol"] * simu.vol_lim / cur["price"]:
                 reduced_hold = hold
                 reduced_cap = self.share_caps[symbol]
@@ -154,7 +154,7 @@ class ChampagneTower(StrategyBase):
             cur = simu.get_data(symbol, tick)
             cap_free_tmp = self.cap_free
             if tick_id < simu.warmup_ticks:
-                cap_free_tmp = min(self.cap_free, simu.cap * simu.warmup_cap_ratio)
+                cap_free_tmp = min(cap_free_tmp, simu.cap * simu.warmup_cap_ratio)
             cur_cap = min(
                 cap_free_tmp,
                 cur["vol"] * simu.vol_lim,
@@ -186,10 +186,12 @@ class ChampagneTower(StrategyBase):
 class ChampagneTowerHourlyWeighted(ChampagneTower):
     def __init__(self, simu, show_progress=True):
         super().__init__(simu, show_progress=show_progress)
-    
+
     def get_hour_weight(self, tick):
         hour = pd.to_datetime(tick).hour % 8
-        return np.power(2, -(7 - float(hour))).astype(float)  # Integers to negative integer powers are not allowed
+        return np.power(2, -(7 - float(hour))).astype(
+            float
+        )  # Integers to negative integer powers are not allowed
 
     def sell(self, tick):
         """Sells shares with negative signal."""
@@ -210,7 +212,7 @@ class ChampagneTowerHourlyWeighted(ChampagneTower):
             reduced_hold *= h_wt
             reduced_cap *= h_wt
             # updates
-            self.share_holds[symbol] -= reduced_hold 
+            self.share_holds[symbol] -= reduced_hold
             self.share_caps[symbol] -= reduced_cap
             cur_fee = reduced_hold * cur["price"] * simu.fee
             self.cur_pnl -= cur_fee
@@ -233,7 +235,7 @@ class ChampagneTowerHourlyWeighted(ChampagneTower):
             cur = simu.get_data(symbol, tick)
             cap_free_tmp = self.cap_free * h_wt  # apply hour weight
             if tick_id < simu.warmup_ticks:
-                cap_free_tmp = min(self.cap_free, simu.cap * simu.warmup_cap_ratio)
+                cap_free_tmp = min(cap_free_tmp, simu.cap * simu.warmup_cap_ratio)
             cur_cap = min(
                 cap_free_tmp,
                 cur["vol"] * simu.vol_lim,
@@ -242,17 +244,16 @@ class ChampagneTowerHourlyWeighted(ChampagneTower):
             self.add_hold(symbol, cur_cap, cur["price"])
 
 
-class DynamicShare(StrategyBase):
-    def __init__(self, simu, show_progress=True):
-        super().__init__(simu, show_progress)
-    
-
-
 def relu(x):
     return np.maximum(x, 0)
 
-def linear(x, a=1, b=0):
+
+def linear(x, a=1.0, b=0):
     return a * x + b
+
+
+def sigmoid(x, c=1.0):
+    return 1 / (1 + np.exp(-x / c))
 
 
 class WeightedTarget(ChampagneTower):
@@ -261,7 +262,7 @@ class WeightedTarget(ChampagneTower):
         self.symbol_wt = defaultdict(float)
         self.set_activation(activation, atv_params)
 
-    def set_activation(self, activation: Union[Callable, str],  atv_params):
+    def set_activation(self, activation: Union[Callable, str], atv_params):
         if isinstance(activation, str):
             if activation == "relu":
                 self.atv = relu
@@ -308,122 +309,113 @@ class WeightedTarget(ChampagneTower):
             self.add_hold(symbol, cur_cap, cur["price"])
 
 
-def champagne_tower(simu, show_progress=True):
-    """Fill strong signal volume first"""
-    # Data out
-    trade_record = {
-        "time": [],
-        "cap_free": [],
-        "cap_used": [],
-        "n_symbol": [],
-        "pnl": [],
-        "vol_buy": [],
-        "vol_sell": [],
-    }
-    symbol_data = defaultdict(list)
-    symbol_pnl = defaultdict(float)
-    symbol_fee = defaultdict(float)
-    # Cache
-    share_holds = defaultdict(float)
-    share_caps = defaultdict(float)
-    # Simulation
-    cum_pnl = 0
-    cap_free = simu.cap
-    ticks = simu.ticks
-    if show_progress:
-        ticks = tqdm(ticks)
-    for tick_id, tick in enumerate(ticks):
-        pnl = 0
-        cur_buy = 0
-        cur_sell = 0
-        # check if crypto trading hour (00:00, 08:00, 16:00)
-        if pd.to_datetime(tick).hour in [0, 8, 16]:
-            for symbol, hold in share_holds.items():
-                cur = simu.get_data(symbol, tick)
-                cur_pnl = hold * cur["price"] * cur["funding_rate"]
-                pnl += cur_pnl
-                symbol_pnl[symbol] += cur_pnl
-        # sell shares with negative signal
-        for symbol, hold in share_holds.items():
-            cur = simu.get_data(symbol, tick)
-            if cur["signal"] > simu.sell_point or hold == 0:
-                continue
-            # free capital
-            if hold <= cur["vol"] * simu.vol_lim / cur["price"]:
-                reduced_hold = hold
-                reduced_cap = share_caps[symbol]
-                share_holds[symbol] = 0
-                share_caps[symbol] = 0
-            else:
-                reduced_hold = cur["vol"] * simu.vol_lim / cur["price"]
-                reduced_cap = share_caps[symbol] * reduced_hold / hold
-                share_holds[symbol] -= reduced_hold
-                share_caps[symbol] -= reduced_cap
-            cur_fee = reduced_hold * cur["price"] * simu.fee
-            pnl -= cur_fee
-            symbol_fee[symbol] += cur_fee
-            cap_free += reduced_cap
-            cur_sell += reduced_cap
-            logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
-        # buy top positive signals
-        sig_sybs = []
+class DynamicShare(StrategyBase):
+    def __init__(self, simu, show_progress=True):
+        super().__init__(simu, show_progress)
+        self.symbol_wt = defaultdict(float)
+        self.symbol_wt_norm = defaultdict(float)
+
+    def update_share_wt(self, tick):
+        simu = self.simu
+        alpha = 1 - np.exp(-np.log(2) / 72)
+        # update new weight
+        total_wt = 0
         for symbol in simu.symbols:
             cur = simu.get_data(symbol, tick)
-            sig_sybs.append((cur["signal"], symbol))
-        sig_sybs = sorted(sig_sybs, reverse=True)
-        for cur_sig, symbol in sig_sybs:
-            if cap_free <= 0.01:
-                break
-            if cur_sig <= simu.buy_point:
-                break
-            cur = simu.get_data(symbol, tick)
-            cap_free_tmp = cap_free
-            if tick_id < simu.warmup_ticks:
-                cap_free_tmp = min(cap_free, simu.cap * simu.warmup_cap_ratio)
-            # buy
-            cur_cap = min(
-                cap_free_tmp,
-                cur["vol"] * simu.vol_lim,
-                simu.cap * simu.hold_lim - share_caps[symbol],
+            cur_wt = sigmoid(
+                cur["signal"] - simu.buy_point,
+                (simu.buy_point - simu.sell_point) * 0.01,
             )
-            new_hold = cur_cap / cur["price"]
-            share_holds[symbol] += new_hold
-            share_caps[symbol] += cur_cap
-            cur_fee = cur_cap * simu.fee
-            pnl -= cur_fee
-            symbol_fee[symbol] += cur_fee
-            cap_free -= cur_cap
-            cur_buy += cur_cap
-            logger.debug(f"buy {new_hold} {symbol} at {cur['price']}")
-        # record
-        trade_record["time"].append(tick)
-        trade_record["cap_free"].append(cap_free)
-        trade_record["cap_used"].append(simu.cap - cap_free)
-        trade_record["pnl"].append(pnl)
-        trade_record["vol_buy"].append(cur_buy)
-        trade_record["vol_sell"].append(-cur_sell)
-        n_symbol = 0
-        for symbol, hold in share_holds.items():
-            if hold > 0:
-                n_symbol += 1
-                symbol_data[symbol].append(
-                    (
-                        tick,
-                        share_caps[symbol],
-                        hold,
-                        symbol_pnl[symbol],
-                        symbol_fee[symbol],
-                    )
-                )  # if need to add extra data, must not change the existing order
-        trade_record["n_symbol"].append(n_symbol)
-        cum_pnl += pnl
-        if show_progress:
-            cum_pnl_rate = cum_pnl / simu.cap * 100
-            ticks.set_description(f"cum_pnl_rate: {cum_pnl_rate:.2f}%")
-    # Data out
-    return {
-        "trade_record": trade_record,
-        "symbol_data": symbol_data,
-        "symbol_pnl": symbol_pnl,
-        "symbol_fee": symbol_fee,
-    }
+            # cur_wt = sigmoid(cur["signal"] - simu.buy_point, 0.0001 * 0.01)
+
+            # cur_wt = relu(cur["signal"] - simu.buy_point)
+
+            self.symbol_wt[symbol] = cur_wt * alpha + self.symbol_wt[symbol] * (
+                1 - alpha
+            )
+            # self.symbol_wt[symbol] = cur_wt
+
+            total_wt += self.symbol_wt[symbol]
+        if total_wt == 0:
+            logger.debug(f"No positive signal at {tick}, skip buying")
+            return
+        # normalize
+        for symbol in simu.symbols:
+            self.symbol_wt_norm[symbol] = self.symbol_wt[symbol] / total_wt
+
+    def sell(self, tick):
+        simu = self.simu
+        for symbol, hold in self.share_holds.items():
+            if hold == 0:
+                continue  # can't sell
+            cur = simu.get_data(symbol, tick)
+            pre_cap = self.share_caps[symbol]
+            nxt_cap = simu.cap * self.symbol_wt_norm[symbol]
+            if nxt_cap >= pre_cap:  # need buy, not sell
+                continue
+            reduced_hold = min(
+                hold * (pre_cap - nxt_cap) / pre_cap,  # as planned
+                cur["vol"] * simu.vol_lim / cur["price"],  # market allowed
+            )
+            reduced_cap = pre_cap * reduced_hold / hold
+
+            if reduced_cap < simu.cap * 0.005:
+                continue
+
+            # updates
+            self.share_holds[symbol] -= reduced_hold
+            self.share_caps[symbol] -= reduced_cap
+            cur_fee = reduced_hold * cur["price"] * simu.fee
+            self.cur_pnl -= cur_fee
+            self.symbol_fee[symbol] += cur_fee
+            self.cap_free += reduced_cap
+            self.cur_sell += reduced_cap
+            logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+
+    def buy(self, tick, tick_id=None):
+        simu = self.simu
+        # first fulfill top positive signals
+        sig_sybs = self.get_ranked_signal(tick, simu)
+        for cur_sig, symbol in sig_sybs:
+            if self.cap_free <= 0.01:
+                break
+            # determine assigned share
+            cur = simu.get_data(symbol, tick)
+            pre_cap = self.share_caps[symbol]
+            nxt_cap = simu.cap * self.symbol_wt_norm[symbol]
+            if nxt_cap >= simu.cap * simu.hold_lim:
+                nxt_cap = simu.cap * simu.hold_lim
+            if nxt_cap <= pre_cap:  # need sell, not buy
+                continue
+            increased_cap = min(
+                nxt_cap - pre_cap,  # as planned
+                cur["vol"] * simu.vol_lim,  # allowed
+                self.cap_free,
+            )
+
+            if increased_cap < simu.cap * 0.005:
+                continue
+
+            # update
+            self.add_hold(symbol, increased_cap, cur["price"])
+
+    def run(self, pass_data=True):
+        simu = self.simu
+        self.cum_pnl = 0
+        self.cap_free = simu.cap
+        self.set_ticks()
+        for tick_id, tick in enumerate(self.ticks):
+            self.cur_pnl = 0
+            self.cur_buy = 0
+            self.cur_sell = 0
+            # process
+            self.fund(tick)
+            self.update_share_wt(tick)
+            self.sell(tick)
+            self.buy(tick, tick_id)
+            # updates
+            self.update(tick)
+            self.cum_pnl += self.cur_pnl
+            self.update_ticks()
+        if pass_data:
+            self.pass_data()

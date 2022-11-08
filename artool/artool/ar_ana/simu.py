@@ -348,7 +348,6 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         return fig, ax
 
     def plot_pnl_hist(self, fig=None, ax=None, label=None):
-        print("#### PnL hist")
         if ax is None:
             fig, ax = plt.subplots()
         sns.histplot(data=self.trade_record, x="pnl", bins=40, ax=ax, label=label)
