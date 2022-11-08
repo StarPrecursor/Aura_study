@@ -124,57 +124,67 @@ def shap_summary_plot(ar_model, X, save_dir, label, sampling=None):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("model_config", type=str, help="config file")
+    parser.add_argument("config_path", nargs="*", action="store", help="config path(s) for model evaluation")
     parser.add_argument(
         "-n", "--n_sample", type=int, default=None, help="number of samples"
     )
     args = parser.parse_args()
 
-    # Config
-    config_path = Path(args.model_config)
-    with open(config_path) as f:
-        cfg = yaml.load(f, Loader=yaml.FullLoader)
-    model_dir = Path(cfg["model_dir"])
-    model_name = cfg["model_name"]
+    if not args.config_path:
+        logger.error("No config path provided")
+        parser.print_help()
+        exit()
+    else:
+        for p in args.config_path:
+            if not Path(p).exists():
+                logger.error(f"Config path {p} does not exist, skipping")
+                continue
+            logger.info("#"*80)
+            logger.info(f"Executing config: {p}")
+            # Config
+            with open(p) as f:
+                cfg = yaml.load(f, Loader=yaml.FullLoader)
+            model_dir = Path(cfg["model_dir"])
+            model_name = cfg["model_name"]
 
-    # Load model
-    logger.info("Loading model...")
-    model = ar_model.fr_model.FRModel_LGB(cfg)
-    model.load_model(model_dir, model_name)
+            # Load model
+            logger.info("Loading model...")
+            model = ar_model.fr_model.FRModel_LGB(cfg)
+            model.load_model(model_dir, model_name)
 
-    # Get inputs
-    logger.info("Loading inputs...")
-    input_dir = Path(cfg["input_dir"])
-    df = pd.read_feather(input_dir / "input.feather")
-    df["y_pred"] = model.predict(df[cfg["features"]])
-    split_time = pd.to_datetime(cfg["train_test_split_date"])
-    df_tr, df_val, df_te = ar_model.train_utils.data_split_by_time(
-        df, cfg["time"], split_time, val_ratio=0.2
-    )
-    x_tr = df_tr[cfg["features"]]
-    y_tr = df_tr[cfg["target"]]
-    x_val = df_val[cfg["features"]]
-    y_val = df_val[cfg["target"]]
-    x_te = df_te[cfg["features"]]
-    y_te = df_te[cfg["target"]]
+            # Get inputs
+            logger.info("Loading inputs...")
+            input_dir = Path(cfg["input_dir"])
+            df = pd.read_feather(input_dir / "input.feather")
+            df["y_pred"] = model.predict(df[cfg["features"]])
+            split_time = pd.to_datetime(cfg["train_test_split_date"])
+            df_tr, df_val, df_te = ar_model.train_utils.data_split_by_time(
+                df, cfg["time"], split_time, val_ratio=0.2
+            )
+            x_tr = df_tr[cfg["features"]]
+            y_tr = df_tr[cfg["target"]]
+            x_val = df_val[cfg["features"]]
+            y_val = df_val[cfg["target"]]
+            x_te = df_te[cfg["features"]]
+            y_te = df_te[cfg["target"]]
 
-    # Evaluate
-    logger.info("Evaluating...")
-    plot_learning_curve(model, model_dir)
-    y_tr_pred = df_tr["y_pred"]
-    y_val_pred = df_val["y_pred"]
-    y_te_pred = df_te["y_pred"]
-    plot_pred_vs_true(y_tr, y_tr_pred, model_dir, label="train")
-    plot_pred_vs_true(y_val, y_val_pred, model_dir, label="val")
-    plot_pred_vs_true(y_te, y_te_pred, model_dir, label="test")
+            # Evaluate
+            logger.info("Evaluating...")
+            plot_learning_curve(model, model_dir)
+            y_tr_pred = df_tr["y_pred"]
+            y_val_pred = df_val["y_pred"]
+            y_te_pred = df_te["y_pred"]
+            plot_pred_vs_true(y_tr, y_tr_pred, model_dir, label="train")
+            plot_pred_vs_true(y_val, y_val_pred, model_dir, label="val")
+            plot_pred_vs_true(y_te, y_te_pred, model_dir, label="test")
 
-    # Plot symbol pred curve
-    plot_symbol_pred_curve(
-        df_te, cfg["time"], "y_pred", model_dir, label="test", y_true=cfg["target"]
-    )
+            # Plot symbol pred curve
+            plot_symbol_pred_curve(
+                df_te, cfg["time"], "y_pred", model_dir, label="test", y_true=cfg["target"]
+            )
 
-    # SHAP
-    logger.info("SHAP importance study...")
-    shap_summary_plot(model, x_tr, model_dir, "train", sampling=args.n_sample)
-    shap_summary_plot(model, x_val, model_dir, "val", sampling=args.n_sample)
-    shap_summary_plot(model, x_te, model_dir, "test", sampling=args.n_sample)
+            # SHAP
+            logger.info("SHAP importance study...")
+            shap_summary_plot(model, x_tr, model_dir, "train", sampling=args.n_sample)
+            shap_summary_plot(model, x_val, model_dir, "val", sampling=args.n_sample)
+            shap_summary_plot(model, x_te, model_dir, "test", sampling=args.n_sample)
