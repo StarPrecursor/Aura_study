@@ -112,7 +112,7 @@ def get_future_features(df, names, lookforwards, scale=1, min_periods=None):
     return df_out
 
 
-def eff_target(sr, df, fr_col="funding_rate", price_col="price"):
+def eff_target(sr, df, fr_col="funding_rate_trade", price_col="price"):
     idx = sr.index
     if idx[0] == 0:
         return 0
@@ -128,7 +128,7 @@ def eff_target(sr, df, fr_col="funding_rate", price_col="price"):
 
 def get_future_fr_eff(
     df,
-    fr_col="funding_rate",
+    fr_col="funding_rate_trade",
     price_col="price",
     lookforwards=[1, 3, 5],
     scale=1,

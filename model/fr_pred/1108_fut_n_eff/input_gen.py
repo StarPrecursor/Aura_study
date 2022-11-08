@@ -44,22 +44,25 @@ def process_symbol(symbol):
     # add fr_eff
     df_eff = ar_io.ar_fe.get_future_fr_eff(
         df_out,
-        fr_col="funding_rate",
+        #fr_col="funding_rate",
+        fr_col="funding_rate_trade",
         price_col="price",
         lookforwards=[1, 3, 5, 10, 15, 21, 30, 45],
+        scale=8,
+        min_periods=1,
     )
     return pd.concat([df_out, df_eff], axis=1)
 
 
 #### debug
-# symbol = "BTCUSDT"
-# df_debug = process_symbol(symbol)
+#symbol = "BTCUSDT"
+#df_debug = process_symbol(symbol)
 ##print(df_debug.columns)
-# df_debug = df_debug.loc[
-#    :, ["time_H", "funding_rate", "price", "funding_rate__future_3_eff", "funding_rate__future_21_eff"]
-# ]
-# print(df_debug.head(20))
-# exit()
+#df_debug = df_debug.loc[
+#   :, ["time_H", "funding_rate_trade", "price", "funding_rate_trade__future_3_eff", "funding_rate_trade__future_21_eff"]
+#]
+#print(df_debug.head(20))
+#exit()
 ####
 
 df = ar_io.processors.merge_symbols_mp(process_symbol, symbols)
