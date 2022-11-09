@@ -173,8 +173,13 @@ class ChampagneTower(StrategyBase):
             self.cur_sell = 0
             # process
             self.fund(tick)
-            self.sell(tick)
-            self.buy(tick, tick_id)
+            if simu.trade_only_8h:
+                if pd.to_datetime(tick).hour == 8:
+                    self.sell(tick)
+                    self.buy(tick, tick_id)
+            else:
+                self.sell(tick)
+                self.buy(tick, tick_id)
             # updates
             self.update(tick)
             self.cum_pnl += self.cur_pnl

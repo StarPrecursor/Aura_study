@@ -56,6 +56,7 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         self.signal_true = False
         if "signal_true" in self.trade_data[self.symbols[0]].columns:
             self.signal_true = True
+        self.trade_only_8h = False
 
     def __copy__(self):
         new_self = TradeSimulatorSignal(self.trade_data, preprocess=False)
