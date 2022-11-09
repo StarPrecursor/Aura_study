@@ -317,6 +317,103 @@ class ChampagneTowerEff(ChampagneTower):
             )
             self.add_hold(symbol, cur_cap, cur["price"])
 
+
+class ChampagneTowerLazy(ChampagneTower):
+    """Predicts signal at 0/8/16 hour."""
+    def __init__(self, simu, show_progress=True):
+        super().__init__(simu, show_progress)
+        self.lazy_signal = {}
+
+    def update_lazy_signal(self, tick):
+        simu = self.simu
+        if pd.to_datetime(tick).hour in [0, 8, 16]:
+            for symbol in simu.symbols:
+                cur = simu.get_data(symbol, tick)
+                self.lazy_signal[symbol] = cur["signal"]
+
+    def sell(self, tick):
+        """Sells shares with negative signal."""
+        # check if lazy_signal empty
+        if not self.lazy_signal:
+            logger.debug("No lazy_signal available, skip sell.")
+            return
+        # sell
+        simu = self.simu
+        for symbol, hold in self.share_holds.items():
+            cur = simu.get_data(symbol, tick)
+            if self.lazy_signal[symbol] > simu.sell_point or hold == 0:
+                continue
+            # free capital
+            if hold <= cur["vol"] * simu.vol_lim / cur["price"]:
+                reduced_hold = hold
+                reduced_cap = self.share_caps[symbol]
+                self.share_holds[symbol] = 0
+                self.share_caps[symbol] = 0
+            else:
+                reduced_hold = cur["vol"] * simu.vol_lim / cur["price"]
+                reduced_cap = self.share_caps[symbol] * reduced_hold / hold
+                self.share_holds[symbol] -= reduced_hold
+                self.share_caps[symbol] -= reduced_cap
+            cur_fee = reduced_hold * cur["price"] * simu.fee
+            self.cur_pnl -= cur_fee
+            self.symbol_fee[symbol] += cur_fee
+            self.cap_free += reduced_cap
+            self.cur_sell += reduced_cap
+            logger.debug(f"sell {reduced_hold} {symbol} at {cur['price']}")
+
+    def get_ranked_lazy_signal(self, tick, simu):
+        sig_sybs = []
+        for symbol in simu.symbols:
+            sig_sybs.append((self.lazy_signal[symbol], symbol))
+        sig_sybs = sorted(sig_sybs, reverse=True)
+        return sig_sybs
+
+    def buy(self, tick, tick_id):
+        # check if lazy_signal empty
+        if not self.lazy_signal:
+            logger.debug("No lazy_signal available, skip buy.")
+            return
+        # buy top positive signals
+        simu = self.simu
+        sig_sybs = self.get_ranked_lazy_signal(tick, simu)
+        for cur_sig, symbol in sig_sybs:
+            if self.cap_free <= 0.01:
+                break
+            if cur_sig <= simu.buy_point:
+                break
+            # determine assigned share
+            cur = simu.get_data(symbol, tick)
+            cap_free_tmp = self.cap_free
+            if tick_id < simu.warmup_ticks:
+                cap_free_tmp = min(cap_free_tmp, simu.cap * simu.warmup_cap_ratio)
+            cur_cap = min(
+                cap_free_tmp,
+                cur["vol"] * simu.vol_lim,
+                simu.cap * simu.hold_lim - self.share_caps[symbol],
+            )
+            self.add_hold(symbol, cur_cap, cur["price"])
+
+    def run(self, pass_data=True):
+        simu = self.simu
+        self.cum_pnl = 0
+        self.cap_free = simu.cap
+        self.set_ticks()
+        for tick_id, tick in enumerate(self.ticks):
+            self.cur_pnl = 0
+            self.cur_buy = 0
+            self.cur_sell = 0
+            # process
+            self.update_lazy_signal(tick)
+            self.fund(tick)
+            self.sell(tick)
+            self.buy(tick, tick_id)
+            # updates
+            self.update(tick)
+            self.cum_pnl += self.cur_pnl
+            self.update_ticks()
+        if pass_data:
+            self.pass_data()
+
 def relu(x):
     return np.maximum(x, 0)
 

@@ -765,6 +765,8 @@ class TradeSimulatorSignalGeneral(TradeSimulatorSignalSimple):
         return new_self
 
     def set_strategy(self, strategy, **kwargs):
+        strategy_name = strategy.__name__
+        logger.debug(f"Use strategy: {strategy_name}")
         self.strategy_class = strategy
         self.strategy_kwargs = kwargs
         self.strategy = strategy(self, **kwargs)
