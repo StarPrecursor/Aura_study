@@ -14,7 +14,6 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 # Settings
 date_start = datetime.datetime(2022, 10, 19)
 date_end = datetime.datetime(2022, 11, 8)
-frp = ar_io.processors.FundingRateProcessor(date_start, date_end).get_symbol_list(logic="and")
 features = ["time", "lastFundingRate", "interestRate", "amount"]
 
 # Paths
@@ -53,7 +52,9 @@ def generate_symbol(df, symbol):
     df_agg.to_feather(df_path_out)
     return 0
 
-for symbol in ["BTCUSDT"]:  # for debugging
+symbols = ar_io.processors.FundingRateProcessor(date_start, date_end).get_symbol_list(logic="and")
+for symbol in symbols:
+#for symbol in ["BTCUSDT"]:  # for debugging
     print(f"# Processing {symbol}")
     try:
         df_syb = df_br.loc[df_br["symbol"] == symbol, features]
