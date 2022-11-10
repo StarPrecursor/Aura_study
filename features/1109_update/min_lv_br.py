@@ -12,8 +12,9 @@ from artool import ar_io
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 # Settings
-date_start = datetime.datetime(2022, 10, 19)
-date_end = datetime.datetime(2022, 11, 8)
+syb_start = datetime.datetime(2022, 1, 1)
+syb_end = datetime.datetime(2022, 11, 8)
+symbols = ar_io.processors.FundingRateProcessor(syb_start, syb_end).get_symbol_list(logic="or")
 features = ["time", "lastFundingRate", "interestRate", "amount"]
 
 # Paths
@@ -48,11 +49,14 @@ def generate_symbol(df, symbol):
     }
     df_agg.rename(columns=rename_dict, inplace=True)
     # save
-    df_path_out = df_dir / symbol / "1m" / "features_br.feather"
+    dir_out = df_dir / symbol / "1m"
+    if not dir_out.exists():
+        print(f"Folder {dir_out} does not exist. Skip.")
+        return 0
+    df_path_out = dir_out / "features_br.feather"
     df_agg.to_feather(df_path_out)
     return 0
 
-symbols = ar_io.processors.FundingRateProcessor(date_start, date_end).get_symbol_list(logic="and")
 for symbol in symbols:
 #for symbol in ["BTCUSDT"]:  # for debugging
     print(f"# Processing {symbol}")

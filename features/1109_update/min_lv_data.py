@@ -17,12 +17,29 @@ date_start = datetime.datetime(2022, 1, 1)
 #date_end = datetime.datetime(2022, 9, 1)
 date_end = datetime.datetime(2022, 11, 8)
 frp = ar_io.processors.FundingRateProcessor(date_start, date_end)
-symbols = frp.get_symbol_list(logic="and")
+#symbols = frp.get_symbol_list(logic="and")
+symbols = frp.get_symbol_list(logic="or")
+
+#replace = False
+replace = True
 
 def generate_symbol(symbol, trading_type="um"):
     df_dir = Path("/home/yangzhe/data/binance/data/futures/um/daily/klines")
     if trading_type == "spot":
         df_dir = Path("/home/yangzhe/data/binance/data/spot/daily/klines")
+
+    # Check if available
+    save_dir = df_dir / symbol / "1m"
+    if not save_dir.exists():
+        print(f"Folder {save_dir} does not exist. Skip.")
+        return 0
+    df_path_out = df_dir / symbol / "1m" / "features_H.feather"
+
+    # Check if need rerun
+    if df_path_out.exists() and not replace:
+        print(f"File {df_path_out} exists. Skip.")
+        return 0
+    
     # Inputs
     df_path = df_dir / symbol / "1m" / "merge.feather"
     if not df_path.exists():
@@ -101,7 +118,6 @@ def generate_symbol(symbol, trading_type="um"):
     df_out_agg = pd.concat([df_out_agg, df_new_cols], axis=1)
 
     # Save to feather
-    df_path_out = df_dir / symbol / "1m" / "features_H.feather"
     df_out_agg.to_feather(df_path_out)
     return 0
 

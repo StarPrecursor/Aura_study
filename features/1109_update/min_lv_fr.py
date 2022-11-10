@@ -17,7 +17,8 @@ date_start = datetime.datetime(2022, 1, 1)
 #date_end = datetime.datetime(2022, 9, 1)
 date_end = datetime.datetime(2022, 11, 8)
 frp = ar_io.processors.FundingRateProcessor(date_start, date_end)
-symbols = frp.get_symbol_list(logic="and")
+#symbols = frp.get_symbol_list(logic="and")
+symbols = frp.get_symbol_list(logic="or")
 features = [
     "timestamp",
     "funding_timestamp",
@@ -26,8 +27,22 @@ features = [
     "mark_price",
 ]
 
+#replace = False
+replace = True
+
 
 def generate_symbol(df_fr, symbol):
+
+    # Check if available
+    save_dir = df_dir / symbol / "1m"
+    if not save_dir.exists():
+        print(f"Folder {save_dir} does not exist. Skip.")
+        return 0
+    save_path = save_dir / "features_fr.feather"
+    if save_path.exists() and not replace:
+        print(f"File {save_path} exists. Skip.")
+        return 0
+
     # Add rolling features
     df_new_cols = ar_io.ar_fe.get_rolling_features(
         df_fr, ["funding_rate"], [3, 5, 10, 20, 50]
@@ -105,20 +120,25 @@ def generate_symbol(df_fr, symbol):
     df_fr_agg = pd.concat([df_fr_agg, df_new_cols], axis=1)
 
     # Save
-    save_path = df_dir / symbol / "1m" / "features_fr.feather"
     df_fr_agg.to_feather(save_path)
     return 0
 
 
 for symbol in tqdm(symbols):
-# for symbol in ["BTCUSDT"]:  # for debugging
+#for symbol in ["ANCBUSD"]:  # for debugging
     print(f"# Processing {symbol}")
+    # Check if available
+    save_dir = df_dir / symbol / "1m"
+    if not save_dir.exists():
+        print(f"Folder {save_dir} does not exist. Skip.")
+        continue
     try:
         df_fr = frp.get_symbol_data(symbol, features, use_8h=False, resample="1min")
         df_fr["time"] = pd.to_datetime(df_fr["timestamp"], unit="us")
         df_fr = df_fr.sort_values(by="time")
     except:
         print(f">>> Failed to load {symbol}")
-        continue
+        #continue
+        break
     generate_symbol(df_fr, symbol)
     print(f"{symbol} done")
