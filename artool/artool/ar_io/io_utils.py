@@ -48,3 +48,14 @@ def decouple_df(df, on="symbol", within=[], feature_map={}):
         df_tmp = df[df[on] == member]
         df_collect[member] = df_tmp[rename_dict.keys()].rename(columns=rename_dict)
     return df_collect
+
+
+def select_df_date_range(df, time_col, start_date=None, end_date=None):
+    if start_date is None:
+        start_date = df[time_col].min()
+    if end_date is None:
+        end_date = df[time_col].max()
+    return df[
+        (pd.to_datetime(df[time_col]) >= start_date)
+        & (pd.to_datetime(df[time_col]) <= end_date)
+    ]

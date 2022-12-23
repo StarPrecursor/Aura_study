@@ -345,6 +345,7 @@ class TradeSimulatorSignal(TradeSimulatorBase):
         if ax is None:
             fig, ax = plt.subplots()
         sns.lineplot(data=self.trade_record, x="time", y="pnl", ax=ax, label=label)
+        ax.axhline(0, color="red", linestyle="--", alpha=0.5, label="0")
         ax.set_title("PnL curve")
         return fig, ax
 
@@ -781,6 +782,30 @@ class TradeSimulatorSignalGeneral(TradeSimulatorSignalSimple):
             return
         self.strategy.run()
         self.trade_done = True
+
+
+class TradeSimulatorSignalGeneralNegtive(TradeSimulatorSignalGeneral):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.signal = None
+        self.strategy = None
+        self.strategy_ready = False
+    
+    def hash_trade_data_worker(self, symbol):
+        hash_dict = {}
+        df = self.trade_data[symbol]
+        for i, row in df.iterrows():
+            tick = pd.to_datetime(row["time"])
+            hash_dict[tick] = {
+                "price": row["price"],
+                "funding_rate": row["funding_rate"],
+                "vol": row["vol"],
+                "signal": row["signal"],
+                "amount": row["amount"],
+                "interest": row["interest"],
+            }
+        return symbol, hash_dict
+
 
 
 # Naive attempt, not working well, to be removed

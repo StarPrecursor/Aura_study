@@ -78,7 +78,7 @@ class StrategyBase:
         self.trade_record["vol_sell"].append(-self.cur_sell)
         n_symbol = 0
         for symbol, hold in self.share_holds.items():
-            if hold > 0:
+            if hold != 0:
                 n_symbol += 1
                 self.symbol_data[symbol].append(
                     (
@@ -91,17 +91,17 @@ class StrategyBase:
                 )  # if need to add extra data, must not change the existing order
         self.trade_record["n_symbol"].append(n_symbol)
 
-    def get_ranked_signal(self, tick, simu):
+    def get_ranked_signal(self, tick, simu, top_high=True):
         sig_sybs = []
         for symbol in simu.symbols:
             cur = simu.get_data(symbol, tick)
             sig_sybs.append((cur["signal"], symbol))
-        sig_sybs = sorted(sig_sybs, reverse=True)
+        sig_sybs = sorted(sig_sybs, reverse=top_high)
         return sig_sybs
 
-    def add_hold(self, symbol, cur_cap, cur_price):
+    def add_hold(self, symbol, cur_cap, cur_price, direction=1):
         # update hold
-        new_hold = cur_cap / cur_price
+        new_hold = cur_cap / cur_price * direction
         self.share_holds[symbol] += new_hold
         self.share_caps[symbol] += cur_cap
         cur_fee = cur_cap * self.simu.fee
@@ -109,7 +109,7 @@ class StrategyBase:
         self.symbol_fee[symbol] += cur_fee
         self.cap_free -= cur_cap
         self.cur_buy += cur_cap
-        logger.debug(f"buy {new_hold} {symbol} at {cur_price}")
+        logger.debug(f"open {new_hold} {symbol} at {cur_price}")
 
 
 class ChampagneTower(StrategyBase):
@@ -188,6 +188,114 @@ class ChampagneTower(StrategyBase):
             self.pass_data()
 
 
+class ChampagneTowerNegative(StrategyBase):
+    """Profits from negative funding rates.
+
+    Borrow spot and buy long perpetual contract.
+
+    """
+
+    def __init__(self, simu, show_progress=True):
+        super().__init__(simu, show_progress=show_progress)
+        self.hold_hl = 1  # half life of holding
+
+    def reset_data(self):
+        super().reset_data()
+        self.ews_holds = defaultdict(float)
+
+    def close(self, tick):
+        """Close at high signal."""
+        simu = self.simu
+        for symbol, hold in self.share_holds.items():
+            cur = simu.get_data(symbol, tick)
+            if hold >= 0 or cur["signal"] < simu.sell_point:
+                continue
+            # return coins
+            if -hold <= cur["vol"] * simu.vol_lim / cur["price"]:
+                hold_delta = -hold
+                cap_delta = self.share_caps[symbol]
+                self.share_holds[symbol] = 0
+                self.share_caps[symbol] = 0
+            else:
+                hold_delta = -cur["vol"] * simu.vol_lim / cur["price"]
+                cap_delta = self.share_caps[symbol] * hold_delta / hold
+                self.share_holds[symbol] -= hold_delta
+                self.share_caps[symbol] -= cap_delta
+            cur_fee = abs(hold_delta) * cur["price"] * simu.fee
+            self.cur_pnl -= cur_fee
+            self.symbol_fee[symbol] += cur_fee
+            self.cap_free += cap_delta
+            self.cur_sell += cap_delta
+            logger.debug(f"close {hold_delta} {symbol} at {cur['price']}")
+
+    def open(self, tick, tick_id=None):
+        simu = self.simu
+        # buy top positive signals
+        sig_sybs = self.get_ranked_signal(tick, simu, top_high=False)  # low score first
+        cur_new_hold = {}
+        for cur_sig, symbol in sig_sybs:
+            if self.cap_free <= 0.01:
+                break
+            if cur_sig > simu.buy_point:
+                break
+            # determine assigned share
+            cur = simu.get_data(symbol, tick)
+            allowed_amount = 0
+            last_ews = abs(self.ews_holds[symbol])
+            if cur["amount"] > last_ews:
+                allowed_amount = cur["amount"] - last_ews
+            cur_cap = min(
+                self.cap_free,
+                cur["vol"] * simu.vol_lim,
+                simu.cap * simu.hold_lim - self.share_caps[symbol],
+                allowed_amount * cur["price"],
+            )
+            logger.debug(f"amount: {cur['amount']}, last_ews: {last_ews}, cur_allowed_buy: {cur_cap / cur['price']}")
+            if cur_cap <= 0.01:
+                continue
+            self.add_hold(symbol, cur_cap, cur["price"], direction=-1)
+            cur_new_hold[symbol] = - cur_cap / cur["price"]
+        # update ews
+        for symbol, ews_hold in self.ews_holds.items():
+            cur_hold = 0
+            if symbol in cur_new_hold:
+                cur_hold = cur_new_hold[symbol]
+            update_ews = ews_hold * np.exp(np.log(0.5) / self.hold_hl) + cur_hold
+            self.ews_holds[symbol] = update_ews
+
+    def interest(self, tick):
+        """Calculate interest."""
+        simu = self.simu
+        for symbol, hold in self.share_holds.items():
+            if hold >= 0:
+                continue
+            cur = simu.get_data(symbol, tick)
+            cur_interest = self.share_caps[symbol] * cur["interest"]
+            self.cur_pnl -= cur_interest
+            self.symbol_fee[symbol] += cur_interest
+
+    def run(self, pass_data=True):
+        simu = self.simu
+        self.cum_pnl = 0
+        self.cap_free = simu.cap
+        self.set_ticks()
+        for tick_id, tick in enumerate(self.ticks):
+            self.cur_pnl = 0
+            self.cur_buy = 0
+            self.cur_sell = 0
+            # process
+            self.interest(tick)
+            self.fund(tick)
+            self.close(tick)
+            self.open(tick, tick_id)
+            # updates
+            self.update(tick)
+            self.cum_pnl += self.cur_pnl
+            self.update_ticks()
+        if pass_data:
+            self.pass_data()
+
+
 class ChampagneTowerHourlyWeighted(ChampagneTower):
     def __init__(self, simu, show_progress=True):
         super().__init__(simu, show_progress=show_progress)
@@ -251,6 +359,7 @@ class ChampagneTowerHourlyWeighted(ChampagneTower):
 
 class ChampagneTowerEff(ChampagneTower):
     """Champagne Tower with effective signal, considering price change."""
+
     def __init__(self, simu, show_progress=True):
         super().__init__(simu, show_progress)
 
@@ -260,7 +369,9 @@ class ChampagneTowerEff(ChampagneTower):
         cur = simu.get_data(symbol, tick)
         eff_factor = 1
         if self.share_caps[symbol] > 0:
-            eff_factor = self.share_holds[symbol] * cur["price"] / self.share_caps[symbol]
+            eff_factor = (
+                self.share_holds[symbol] * cur["price"] / self.share_caps[symbol]
+            )
         return cur["signal"] * eff_factor
 
     def sell(self, tick):
@@ -320,6 +431,7 @@ class ChampagneTowerEff(ChampagneTower):
 
 class ChampagneTowerLazy(ChampagneTower):
     """Predicts signal at 0/8/16 hour."""
+
     def __init__(self, simu, show_progress=True):
         super().__init__(simu, show_progress)
         self.lazy_signal = {}
@@ -413,6 +525,7 @@ class ChampagneTowerLazy(ChampagneTower):
             self.update_ticks()
         if pass_data:
             self.pass_data()
+
 
 def relu(x):
     return np.maximum(x, 0)

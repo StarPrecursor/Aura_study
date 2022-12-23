@@ -15,7 +15,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 syb_start = datetime.datetime(2022, 1, 1)
 syb_end = datetime.datetime(2022, 11, 8)
 symbols = ar_io.processors.FundingRateProcessor(syb_start, syb_end).get_symbol_list(logic="or")
-features = ["time", "lastFundingRate", "interestRate", "amount"]
+features = ["time", "lastFundingRate", "interestRate", "dailyInterest", "amount"]
 
 # Paths
 df_dir = Path("/home/yangzhe/data/binance/data/futures/um/daily/klines")
@@ -35,7 +35,8 @@ def generate_symbol(df, symbol):
     # aggreate
     agg_dict = {
         "lastFundingRate": ["last", "min", "max"],
-        "interestRate": ["last"],
+        #"interestRate": ["last"],
+        "dailyInterest": ["last"],
         "amount": ["mean"],
     }
     df_agg = df_out.groupby("time_H").agg(agg_dict)
@@ -44,10 +45,15 @@ def generate_symbol(df, symbol):
     df_agg.reset_index(inplace=True)
     # rename
     rename_dict = {
-        "interestRate__last": "interest",
+        #"interestRate__last": "interest",
+        "dailyInterest__last": "interest",
         "amount__mean": "amount",
     }
     df_agg.rename(columns=rename_dict, inplace=True)
+
+    # convert interest to hourly interest
+    df_agg["interest"] = df_agg["interest"] / 24
+
     # save
     dir_out = df_dir / symbol / "1m"
     if not dir_out.exists():

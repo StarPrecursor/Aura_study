@@ -2,6 +2,7 @@
 *.log
 *.feather
 *.csv
+*.zip
 
 **/.archived
 **/.test

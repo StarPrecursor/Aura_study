@@ -170,21 +170,26 @@ def main():
 
             # Evaluate
             logger.info("Evaluating...")
-            plot_learning_curve(model, model_dir)
+            if "eva_name" in cfg:
+                save_dir = model_dir / cfg["eva_name"]
+            else:
+                save_dir = model_dir
+            save_dir.mkdir(exist_ok=True, parents=True)
+            plot_learning_curve(model, save_dir)
             y_tr_pred = df_tr["y_pred"]
             y_val_pred = df_val["y_pred"]
             y_te_pred = df_te["y_pred"]
-            plot_pred_vs_true(y_tr, y_tr_pred, model_dir, label="train")
-            plot_pred_vs_true(y_val, y_val_pred, model_dir, label="val")
-            plot_pred_vs_true(y_te, y_te_pred, model_dir, label="test")
+            plot_pred_vs_true(y_tr, y_tr_pred, save_dir, label="train")
+            plot_pred_vs_true(y_val, y_val_pred, save_dir, label="val")
+            plot_pred_vs_true(y_te, y_te_pred, save_dir, label="test")
 
             # Plot symbol pred curve
             plot_symbol_pred_curve(
-                df_te, cfg["time"], "y_pred", model_dir, label="test", y_true=cfg["target"]
+                df_te, cfg["time"], "y_pred", save_dir, label="test", y_true=cfg["target"]
             )
 
             # SHAP
             logger.info("SHAP importance study...")
-            shap_summary_plot(model, x_tr, model_dir, "train", sampling=args.n_sample)
-            shap_summary_plot(model, x_val, model_dir, "val", sampling=args.n_sample)
-            shap_summary_plot(model, x_te, model_dir, "test", sampling=args.n_sample)
+            shap_summary_plot(model, x_tr, save_dir, "train", sampling=args.n_sample)
+            shap_summary_plot(model, x_val, save_dir, "val", sampling=args.n_sample)
+            shap_summary_plot(model, x_te, save_dir, "test", sampling=args.n_sample)
